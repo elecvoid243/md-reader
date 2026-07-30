@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QSize, Qt
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
     QAction,
@@ -17,16 +17,20 @@ from PyQt5.QtWidgets import (
     QApplication,
     QDockWidget,
     QFileDialog,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QStatusBar,
     QToolBar,
+    QToolButton,
+    QWidget,
 )
 
 from .config import Config
 from .exporter import export_html, export_pdf
 from .file_tree import FileTreeWidget
+from .icons import build_icons
 from .tab_manager import EditorPreviewPair, TabManager
 from .theme_manager import ThemeManager
 from .toc_widget import TocWidget
@@ -54,6 +58,7 @@ class MainWindow(QMainWindow):
         self._setup_window()
         self._setup_components()
         self._setup_menu()
+        self._init_icons()  # 菜单 action 创建后生成图标，供工具栏/菜单使用
         self._setup_toolbar()
         self._setup_statusbar()
         self._connect_signals()
@@ -264,21 +269,69 @@ class MainWindow(QMainWindow):
     def _setup_toolbar(self) -> None:
         toolbar = QToolBar("主工具栏")
         toolbar.setMovable(False)
-        toolbar.setIconSize(toolbar.iconSize())  # 默认大小
+        toolbar.setIconSize(QSize(18, 18))
         self.addToolBar(toolbar)
 
-        # 视图模式切换（最醒目，置于最前）
-        toolbar.addAction(self._act_mode_reading)
-        toolbar.addAction(self._act_mode_instant)
-        toolbar.addAction(self._act_mode_source)
-        toolbar.addAction(self._act_dual_pane)
-        toolbar.addSeparator()
-        toolbar.addAction(self._act_open)
-        toolbar.addAction(self._act_open_folder)
-        toolbar.addSeparator()
-        toolbar.addAction(self._act_save)
-        toolbar.addSeparator()
-        toolbar.addAction(self._act_toggle_theme)
+        # 工具栏仅保留模式切换分段控件（其余功能在菜单栏）
+        toolbar.addWidget(self._build_mode_segment())
+
+    def _init_icons(self) -> None:
+        """生成图标并绑定到菜单 action（工具栏按钮经 defaultAction 共享）"""
+        self._icons = build_icons(self._theme_mgr.palette)
+        self._action_icon = {
+            self._act_mode_reading: "reading",
+            self._act_mode_instant: "instant",
+            self._act_mode_source: "source",
+            self._act_dual_pane: "pane_dual",
+        }
+        # 纯图标按钮的悬浮提示
+        self._act_mode_reading.setToolTip("阅读模式 (Ctrl+Shift+R)")
+        self._act_mode_instant.setToolTip("即时渲染 (Ctrl+Shift+I)")
+        self._act_mode_source.setToolTip("源码编辑 (Ctrl+Shift+M)")
+        self._act_dual_pane.setToolTip("双栏预览 (Ctrl+Shift+P)")
+        self._apply_action_icons()
+
+    def _apply_action_icons(self) -> None:
+        for act, name in self._action_icon.items():
+            act.setIcon(self._icons[name])
+
+    def _refresh_icons(self) -> None:
+        """主题切换后重建全部图标（含浮动控件）"""
+        self._icons = build_icons(self._theme_mgr.palette)
+        self._apply_action_icons()
+        for i in range(self._tabs.count()):
+            pair = self._tabs.widget(i)
+            if isinstance(pair, EditorPreviewPair):
+                pair.set_pane_icons(
+                    self._icons["pane_single"], self._icons["pane_dual"]
+                )
+
+    def _build_mode_segment(self) -> QWidget:
+        """构建模式切换分段控件（纯图标 + 胶囊槽）"""
+        seg = QWidget()
+        seg.setObjectName("mode_seg")
+        lay = QHBoxLayout(seg)
+        lay.setContentsMargins(3, 3, 3, 3)
+        lay.setSpacing(2)
+
+        specs = [
+            (self._act_mode_reading, "tb_mode_reading"),
+            (self._act_mode_instant, "tb_mode_instant"),
+            (self._act_mode_source, "tb_mode_source"),
+        ]
+        for act, obj_name in specs:
+            tb = QToolButton()
+            tb.setObjectName(obj_name)
+            tb.setDefaultAction(act)
+            tb.setAutoRaise(True)
+            tb.setIconSize(QSize(18, 18))
+            tb.setToolButtonStyle(Qt.ToolButtonIconOnly)
+            lay.addWidget(tb)
+        return seg
+
+    def _request_dual_pane(self, checked: bool) -> None:
+        """浮动控件点击 → 驱动全局双栏 action（单一真相源）"""
+        self._act_dual_pane.setChecked(checked)
 
     # ──────────────────────────────────────────
     #  状态栏
@@ -434,6 +487,13 @@ class MainWindow(QMainWindow):
         """切换视图模式（阅读 / 即时渲染 / 源码编辑）"""
         self._view_mode = mode
         self._config.set("view_mode", mode)
+        # 显式同步分段控件选中态（QActionGroup exclusive 会自动取消其余），
+        # 保证菜单/工具栏/快捷键/程序化调用四种入口的 UI 表征一致
+        {
+            "reading": self._act_mode_reading,
+            "instant": self._act_mode_instant,
+            "edit": self._act_mode_source,
+        }[mode].setChecked(True)
         # 双栏开关仅在源码编辑模式下有意义
         self._act_dual_pane.setEnabled(mode == "edit")
         self._apply_view_mode()
@@ -464,6 +524,8 @@ class MainWindow(QMainWindow):
     def _apply_view_mode_to_pair(self, pair: EditorPreviewPair) -> None:
         """将当前视图模式应用到单个新建标签页"""
         pair.set_view_mode(self._view_mode, self._dual_pane)
+        pair.set_dual_pane_callback(self._request_dual_pane)
+        pair.set_pane_icons(self._icons["pane_single"], self._icons["pane_dual"])
         if pair.vditor_pane is not None:
             pair.vditor_pane.set_theme(self._theme_mgr.current_theme)
 
@@ -480,6 +542,7 @@ class MainWindow(QMainWindow):
         if app:
             new_theme = self._theme_mgr.toggle(app)
             self._apply_editor_theme()
+            self._refresh_icons()  # 图标颜色随主题重建
             # 通知所有预览面板切换主题
             for i in range(self._tabs.count()):
                 pair = self._tabs.widget(i)

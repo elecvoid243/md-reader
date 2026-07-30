@@ -9,8 +9,17 @@ from __future__ import annotations
 
 import os
 
-from PyQt5.QtCore import QTimer, pyqtSignal
-from PyQt5.QtWidgets import QSplitter, QTabWidget, QWidget
+from PyQt5.QtCore import QSize, QTimer, pyqtSignal
+from PyQt5.QtGui import QColor
+from PyQt5.QtWidgets import (
+    QButtonGroup,
+    QGraphicsDropShadowEffect,
+    QHBoxLayout,
+    QSplitter,
+    QTabWidget,
+    QToolButton,
+    QWidget,
+)
 
 from .editor import MarkdownEditor
 from .preview import PreviewPane
@@ -60,6 +69,83 @@ class EditorPreviewPair(QWidget):
         self.editor.scroll_percent_changed.connect(self._sync_preview_scroll)
         self.preview.scroll_updated.connect(self._sync_editor_scroll)
 
+        # 右上角浮动 单/双栏 切换控件（仅源码编辑模式显示）
+        self._dual_pane_cb = None
+        self._build_pane_toggle()
+
+    def _build_pane_toggle(self) -> None:
+        """构建右上角浮动的单/双栏分段控件"""
+        self._pane_toggle = QWidget(self)
+        self._pane_toggle.setObjectName("pane_toggle")
+        lay = QHBoxLayout(self._pane_toggle)
+        lay.setContentsMargins(3, 3, 3, 3)
+        lay.setSpacing(2)
+
+        self._btn_single = QToolButton()
+        self._btn_single.setObjectName("pane_single")
+        self._btn_single.setCheckable(True)
+        self._btn_single.setAutoRaise(True)
+        self._btn_single.setIconSize(QSize(16, 16))
+        self._btn_single.setToolTip("单栏：仅显示编辑器")
+
+        self._btn_dual = QToolButton()
+        self._btn_dual.setObjectName("pane_dual")
+        self._btn_dual.setCheckable(True)
+        self._btn_dual.setAutoRaise(True)
+        self._btn_dual.setIconSize(QSize(16, 16))
+        self._btn_dual.setToolTip("双栏：编辑器 + 实时预览")
+
+        group = QButtonGroup(self)
+        group.setExclusive(True)
+        group.addButton(self._btn_single)
+        group.addButton(self._btn_dual)
+
+        lay.addWidget(self._btn_single)
+        lay.addWidget(self._btn_dual)
+
+        self._btn_single.setChecked(not self.dual_pane)
+        self._btn_dual.setChecked(self.dual_pane)
+        self._btn_single.clicked.connect(lambda: self._request_pane(False))
+        self._btn_dual.clicked.connect(lambda: self._request_pane(True))
+
+        # 悬浮阴影
+        shadow = QGraphicsDropShadowEffect(self._pane_toggle)
+        shadow.setBlurRadius(14)
+        shadow.setOffset(0, 3)
+        shadow.setColor(QColor(0, 0, 0, 45))
+        self._pane_toggle.setGraphicsEffect(shadow)
+
+        self._pane_toggle.hide()
+
+    def set_dual_pane_callback(self, cb) -> None:
+        """注入双栏切换回调（点击浮动按钮时通知主窗口更新全局状态）"""
+        self._dual_pane_cb = cb
+
+    def set_pane_icons(self, icon_single, icon_dual) -> None:
+        """设置浮动按钮图标（随主题刷新）"""
+        self._btn_single.setIcon(icon_single)
+        self._btn_dual.setIcon(icon_dual)
+
+    def _request_pane(self, dual: bool) -> None:
+        """浮动按钮点击：通过回调驱动全局双栏状态"""
+        if dual == self.dual_pane:
+            return
+        self._btn_dual.setChecked(dual)
+        self._btn_single.setChecked(not dual)
+        if self._dual_pane_cb is not None:
+            self._dual_pane_cb(dual)
+
+    def _reposition_pane_toggle(self) -> None:
+        """将浮动控件定位到右上角"""
+        self._pane_toggle.adjustSize()
+        w = self._pane_toggle.width()
+        self._pane_toggle.move(max(0, self.width() - w - 12), 10)
+        self._pane_toggle.raise_()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._reposition_pane_toggle()
+
     def _on_text_changed(self) -> None:
         self.is_dirty = True
         self._debounce.start(300)  # 300ms 防抖
@@ -101,6 +187,9 @@ class EditorPreviewPair(QWidget):
             mode: "reading"（仅预览）/ "edit"（源码编辑）/ "instant"（即时渲染）
             dual_pane: 源码编辑模式下是否同时显示预览
         """
+        # 浮动单/双栏控件可见性必须始终与模式同步（即便下方提前返回）
+        self._pane_toggle.setVisible(mode == "edit")
+
         if mode == self.view_mode and dual_pane == self.dual_pane:
             return
 
@@ -126,9 +215,13 @@ class EditorPreviewPair(QWidget):
         self._apply_mode(mode, dual_pane)
 
     def _apply_mode(self, mode: str, dual_pane: bool) -> None:
-        """实际应用模式：控制三个面板的显隐"""
+        """实际应用模式：控制三个面板的显隐 + 浮动控件"""
         self.view_mode = mode
         self.dual_pane = dual_pane
+
+        # 浮动单/双栏控件仅在源码编辑模式显示
+        show_pane = mode == "edit"
+        self._pane_toggle.setVisible(show_pane)
 
         if mode == "reading":
             # 阅读模式：仅预览，全宽
@@ -146,6 +239,10 @@ class EditorPreviewPair(QWidget):
                 self.render_now()
             else:
                 self.preview.hide()
+            # 同步浮动按钮选中态并定位
+            self._btn_dual.setChecked(dual_pane)
+            self._btn_single.setChecked(not dual_pane)
+            self._reposition_pane_toggle()
         elif mode == "instant":
             # 即时渲染：仅 Vditor，把编辑器内容推入
             self.editor.hide()

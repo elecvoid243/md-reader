@@ -362,6 +362,60 @@ QPushButton:default {{
 QPushButton:default:hover {{
     background-color: {p["accent_strong"]};
 }}
+
+/* ═══ 工具栏 ═══ */
+QToolBar {{
+    padding: 7px 14px;
+    spacing: 10px;
+}}
+
+/* ═══ 模式分段控件（胶囊槽 + 选中滑块） ═══ */
+QWidget#mode_seg {{
+    background-color: {p["inset"]};
+    border: 1px solid {p["border"]};
+    border-radius: 9px;
+}}
+QWidget#mode_seg QToolButton {{
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    padding: 5px 13px;
+    min-height: 22px;
+    color: {p["ink_muted"]};
+    font-size: 12.5px;
+    font-weight: 600;
+}}
+QWidget#mode_seg QToolButton:hover {{
+    background-color: {p["hover"]};
+    color: {p["ink_strong"]};
+}}
+QWidget#mode_seg QToolButton:checked {{
+    background-color: {p["accent_soft"]};
+    color: {p["accent_strong"]};
+}}
+QWidget#mode_seg QToolButton:pressed {{
+    background-color: {p["pressed"]};
+}}
+
+/* ═══ 右上角浮动 单/双栏 切换控件 ═══ */
+QWidget#pane_toggle {{
+    background-color: {p["surface"]};
+    border: 1px solid {p["border_strong"]};
+    border-radius: 8px;
+}}
+QWidget#pane_toggle QToolButton {{
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 7px;
+    min-height: 18px;
+}}
+QWidget#pane_toggle QToolButton:hover {{
+    background-color: {p["hover"]};
+}}
+QWidget#pane_toggle QToolButton:checked {{
+    background-color: {p["accent_soft"]};
+}}
 """
 
 
