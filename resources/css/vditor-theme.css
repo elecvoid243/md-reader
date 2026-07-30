@@ -7,12 +7,11 @@
 
 /* ══════════════ 容器：纸面 ══════════════ */
 
-body {
-    background: var(--bg-sheet);
-}
+/* body 背景由 theme-light/dark.css 提供桌面渐变，此处不覆盖，
+   使即时渲染两侧露出与阅读模式一致的桌面层次。 */
 
 .vditor {
-    background: var(--bg-sheet) !important;
+    background: transparent !important;
     border: none !important;
     border-radius: 0 !important;
     color: var(--ink);
@@ -30,12 +29,17 @@ body {
 .vditor-toolbar__item svg {
     fill: var(--ink-muted) !important;
     color: var(--ink-muted) !important;
+    transition: fill 0.15s ease, color 0.15s ease;
 }
 
 .vditor-toolbar__item:hover svg,
 .vditor-toolbar__item--current svg {
     fill: var(--accent) !important;
     color: var(--accent) !important;
+}
+
+.vditor-toolbar__item {
+    transition: background 0.15s ease;
 }
 
 .vditor-toolbar__item:hover {
@@ -46,24 +50,36 @@ body {
 /* ══════════════ 编辑区背景 ══════════════ */
 
 .vditor-ir {
-    background: var(--bg-sheet) !important;
+    background: transparent !important;
     color: var(--ink) !important;
-    padding: 32px 0 !important;
+    padding: 28px 0 !important;
 }
 
-/* 内容居中，限制阅读宽度（与预览纸面一致） */
-.vditor-reset {
-    max-width: 880px;
-    margin: 0 auto;
-    padding: 0 72px !important;
+/* 纸面卡片：居中悬浮于桌面之上，与阅读模式 #content 同构。
+   用 .vditor-ir .vditor-reset 提高优先级，覆盖 Vditor 默认 margin。 */
+.vditor-ir .vditor-reset {
+    max-width: 880px !important;
+    margin: 0 auto !important;
+    min-height: 100%;
+    padding: 48px 72px !important;
+    background: var(--bg-sheet) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    box-shadow: var(--shadow-sheet);
     font-family: var(--font-body, "Segoe UI", "Microsoft YaHei", sans-serif);
     font-size: 16px;
     line-height: 1.75;
     color: var(--ink);
+    box-sizing: border-box;
 }
 
 @media (max-width: 960px) {
-    .vditor-reset { padding: 0 24px !important; }
+    .vditor-ir .vditor-reset {
+        padding: 32px 24px !important;
+        border-left: none !important;
+        border-right: none !important;
+        border-radius: 0 !important;
+    }
 }
 
 /* ══════════════ 排版：标题（衬线 × 重墨） ══════════════ */
@@ -178,14 +194,16 @@ body {
 
 /* ══════════════ 滚动条 ══════════════ */
 
-.vditor-ir::-webkit-scrollbar { width: 10px; }
-.vditor-ir::-webkit-scrollbar-thumb {
+/* 真正滚动容器是 .vditor-ir .vditor-reset（pre），美化其滚动条 */
+.vditor-ir .vditor-reset::-webkit-scrollbar { width: 10px; height: 10px; }
+.vditor-ir .vditor-reset::-webkit-scrollbar-track { background: transparent; }
+.vditor-ir .vditor-reset::-webkit-scrollbar-thumb {
     background: var(--scrollbar);
     border-radius: 6px;
     border: 2px solid transparent;
     background-clip: padding-box;
 }
-.vditor-ir::-webkit-scrollbar-thumb:hover {
+.vditor-ir .vditor-reset::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-hover);
     background-clip: padding-box;
     border: 2px solid transparent;
