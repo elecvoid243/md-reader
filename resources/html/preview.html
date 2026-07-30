@@ -19,6 +19,87 @@
 
     <!-- QWebChannel（Qt 内置，用于 Python ↔ JS 通信） -->
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <!-- 兼容性 polyfill：Qt 5.15 内嵌 Chromium 83 缺少 Chrome 85+ 的 API，
+         而 mermaid v10 等库依赖它们。必须在第三方库加载前注入。 -->
+    <script>
+        // structuredClone (Chrome 98)
+        if (typeof globalThis.structuredClone !== 'function') {
+            globalThis.structuredClone = function (value) {
+                if (value === null || typeof value !== 'object') return value;
+                if (value instanceof Date) return new Date(value.getTime());
+                if (value instanceof RegExp) return new RegExp(value.source, value.flags);
+                if (Array.isArray(value)) {
+                    return value.map(function (v) { return globalThis.structuredClone(v); });
+                }
+                if (value instanceof Map) {
+                    var m = new Map();
+                    value.forEach(function (v, k) {
+                        m.set(globalThis.structuredClone(k), globalThis.structuredClone(v));
+                    });
+                    return m;
+                }
+                if (value instanceof Set) {
+                    var s = new Set();
+                    value.forEach(function (v) { s.add(globalThis.structuredClone(v)); });
+                    return s;
+                }
+                var result = {};
+                for (var key in value) {
+                    if (Object.prototype.hasOwnProperty.call(value, key)) {
+                        result[key] = globalThis.structuredClone(value[key]);
+                    }
+                }
+                return result;
+            };
+        }
+        // Object.hasOwn (Chrome 93)
+        if (!Object.hasOwn) {
+            Object.hasOwn = function (obj, prop) {
+                return Object.prototype.hasOwnProperty.call(obj, prop);
+            };
+        }
+        // String.prototype.replaceAll (Chrome 85)
+        if (!String.prototype.replaceAll) {
+            String.prototype.replaceAll = function (search, replacement) {
+                if (typeof search === 'string') {
+                    return this.split(search).join(replacement);
+                }
+                return this.replace(search, replacement);
+            };
+        }
+        // Array.prototype.at / String.prototype.at (Chrome 92)
+        if (!Array.prototype.at) {
+            Array.prototype.at = function (n) {
+                n = Math.trunc(n) || 0;
+                if (n < 0) n += this.length;
+                return (n < 0 || n >= this.length) ? undefined : this[n];
+            };
+        }
+        if (!String.prototype.at) {
+            String.prototype.at = function (n) {
+                n = Math.trunc(n) || 0;
+                if (n < 0) n += this.length;
+                return (n < 0 || n >= this.length) ? undefined : this[n];
+            };
+        }
+        // Array.prototype.findLast / findLastIndex (Chrome 97)
+        if (!Array.prototype.findLast) {
+            Array.prototype.findLast = function (cb, thisArg) {
+                for (var i = this.length - 1; i >= 0; i--) {
+                    if (cb.call(thisArg, this[i], i, this)) return this[i];
+                }
+                return undefined;
+            };
+        }
+        if (!Array.prototype.findLastIndex) {
+            Array.prototype.findLastIndex = function (cb, thisArg) {
+                for (var i = this.length - 1; i >= 0; i--) {
+                    if (cb.call(thisArg, this[i], i, this)) return i;
+                }
+                return -1;
+            };
+        }
+    </script>
     <!-- 第三方库 -->
     <script src="../js/marked.min.js"></script>
     <script src="../js/katex.min.js"></script>

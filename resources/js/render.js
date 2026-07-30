@@ -58,10 +58,17 @@ async function renderMarkdown(mdText) {
     }
 
     try {
-        // 1. marked.js 解析 Markdown → HTML
-        let html = marked.parse(mdText);
+        // 1. 保护块级公式 $$...$$（避免 marked 的 breaks 在公式内插入 <br>，
+        //    切割文本节点导致 KaTeX 无法匹配 $$ 定界符）
+        const mathGuard = protectBlockMath(mdText);
 
-        // 2. 预处理：保护 mermaid 代码块（避免被 KaTeX 误处理）
+        // 2. marked.js 解析 Markdown → HTML
+        let html = marked.parse(mathGuard.text);
+
+        // 2.5 还原块级公式（HTML 转义后回填，保持 $$...$$ 位于单一文本节点）
+        html = restoreBlockMath(html, mathGuard.store);
+
+        // 3. 预处理：保护 mermaid 代码块（避免被 KaTeX 误处理）
         const mermaidBlocks = [];
         html = html.replace(
             /<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/gi,
@@ -182,6 +189,34 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/** HTML 转义（字符串版，用于回填 HTML 字符串） */
+function escapeHtmlString(s) {
+    return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/**
+ * 保护块级公式 $$...$$：解析前替换为占位符，
+ * 避免 marked 在公式内部插入 <br> 破坏 KaTeX 定界符。
+ */
+function protectBlockMath(mdText) {
+    const store = [];
+    const text = mdText.replace(/\$\$([\s\S]+?)\$\$/g, function (m) {
+        store.push(m);
+        return '@@BLOCKMATH' + (store.length - 1) + '@@';
+    });
+    return { text: text, store: store };
+}
+
+/** 还原块级公式占位符（HTML 转义，确保作为纯文本进入单一文本节点） */
+function restoreBlockMath(html, store) {
+    return html.replace(/@@BLOCKMATH(\d+)@@/g, function (m, idx) {
+        return escapeHtmlString(store[parseInt(idx, 10)]);
+    });
 }
 
 /** 为标题生成唯一 id */
