@@ -23,6 +23,8 @@ class EditorPreviewPair(QWidget):
         super().__init__(parent)
         self.file_path: str | None = None
         self.is_dirty: bool = False
+        self.view_mode: str = "reading"  # reading / edit
+        self.dual_pane: bool = True  # 编辑模式下是否显示预览
 
         # 分割器：左编辑 右预览
         self._splitter = QSplitter()
@@ -30,7 +32,7 @@ class EditorPreviewPair(QWidget):
         self.preview = PreviewPane()
         self._splitter.addWidget(self.editor)
         self._splitter.addWidget(self.preview)
-        self._splitter.setSizes([500, 500])
+        self._splitter.setSizes([480, 520])
 
         from PyQt5.QtWidgets import QVBoxLayout
 
@@ -80,6 +82,42 @@ class EditorPreviewPair(QWidget):
         """立即渲染（跳过防抖）"""
         self._debounce.stop()
         self._do_render()
+
+    def set_view_mode(self, mode: str, dual_pane: bool) -> None:
+        """
+        设置视图模式
+
+        Args:
+            mode: "reading"（仅预览）或 "edit"（编辑）
+            dual_pane: 编辑模式下是否同时显示预览
+        """
+        self.view_mode = mode
+        self.dual_pane = dual_pane
+
+        if mode == "reading":
+            # 阅读模式：仅预览，全宽
+            self.editor.hide()
+            self.preview.show()
+        else:
+            # 编辑模式：编辑器始终可见
+            self.editor.show()
+            if dual_pane:
+                self.preview.show()
+                self._restore_split()
+            else:
+                self.preview.hide()
+
+    def _restore_split(self) -> None:
+        """恢复双栏的合理分割比例"""
+        width = self._splitter.width()
+        if width > 0:
+            self._splitter.setSizes([int(width * 0.46), int(width * 0.54)])
+        else:
+            self._splitter.setSizes([480, 520])
+
+    def is_preview_visible(self) -> bool:
+        """预览面板当前是否可见"""
+        return self.view_mode == "reading" or self.dual_pane
 
     def set_scroll_sync_enabled(self, enabled: bool) -> None:
         if enabled:

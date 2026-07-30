@@ -46,6 +46,10 @@ class MainWindow(QMainWindow):
         self._config = Config()
         self._theme_mgr = ThemeManager()
 
+        # 视图模式状态（阅读/编辑 + 双栏）
+        self._view_mode: str = self._config.get("view_mode", "reading")
+        self._dual_pane: bool = self._config.get("dual_pane", True)
+
         self._setup_window()
         self._setup_components()
         self._setup_menu()
@@ -174,6 +178,25 @@ class MainWindow(QMainWindow):
         # ── 视图菜单 ──
         view_menu = menubar.addMenu("视图(&V)")
 
+        self._act_edit_mode = QAction("编辑模式", self)
+        self._act_edit_mode.setCheckable(True)
+        self._act_edit_mode.setChecked(self._view_mode == "edit")
+        self._act_edit_mode.setShortcut("Ctrl+Shift+R")
+        self._act_edit_mode.setStatusTip("在阅读模式与编辑模式之间切换")
+        self._act_edit_mode.toggled.connect(self._on_edit_mode_toggled)
+        view_menu.addAction(self._act_edit_mode)
+
+        self._act_dual_pane = QAction("双栏预览", self)
+        self._act_dual_pane.setCheckable(True)
+        self._act_dual_pane.setChecked(self._dual_pane)
+        self._act_dual_pane.setShortcut("Ctrl+Shift+P")
+        self._act_dual_pane.setStatusTip("编辑模式下同时显示预览")
+        self._act_dual_pane.setEnabled(self._view_mode == "edit")
+        self._act_dual_pane.toggled.connect(self._on_dual_pane_toggled)
+        view_menu.addAction(self._act_dual_pane)
+
+        view_menu.addSeparator()
+
         self._act_toggle_file_tree = QAction("文件浏览器", self)
         self._act_toggle_file_tree.setCheckable(True)
         self._act_toggle_file_tree.setChecked(self._config.get("show_file_tree", True))
@@ -220,6 +243,10 @@ class MainWindow(QMainWindow):
         toolbar.setIconSize(toolbar.iconSize())  # 默认大小
         self.addToolBar(toolbar)
 
+        # 视图模式切换（最醒目，置于最前）
+        toolbar.addAction(self._act_edit_mode)
+        toolbar.addAction(self._act_dual_pane)
+        toolbar.addSeparator()
         toolbar.addAction(self._act_open)
         toolbar.addAction(self._act_open_folder)
         toolbar.addSeparator()
@@ -279,6 +306,9 @@ class MainWindow(QMainWindow):
 
         # 连接 TOC 信号
         pair.preview.toc_updated.connect(self._toc.update_toc)
+
+        # 应用当前视图模式（默认阅读模式）
+        self._apply_view_mode_to_pair(pair)
 
         # 更新状态栏
         self._status_file.setText(abs_path)
@@ -349,6 +379,7 @@ class MainWindow(QMainWindow):
     def _new_tab(self) -> None:
         pair = self._tabs.add_tab()
         pair.preview.toc_updated.connect(self._toc.update_toc)
+        self._apply_view_mode_to_pair(pair)
 
     def _close_current_tab(self) -> None:
         idx = self._tabs.currentIndex()
@@ -372,6 +403,37 @@ class MainWindow(QMainWindow):
     # ──────────────────────────────────────────
     #  视图切换
     # ──────────────────────────────────────────
+
+    def _on_edit_mode_toggled(self, checked: bool) -> None:
+        """阅读模式 ↔ 编辑模式 切换"""
+        self._view_mode = "edit" if checked else "reading"
+        self._config.set("view_mode", self._view_mode)
+        # 双栏开关仅在编辑模式下有意义
+        self._act_dual_pane.setEnabled(checked)
+        self._apply_view_mode()
+        mode_text = "编辑模式" if checked else "阅读模式"
+        self.statusBar().showMessage(mode_text, 2500)
+
+    def _on_dual_pane_toggled(self, checked: bool) -> None:
+        """编辑模式下双栏预览开关"""
+        self._dual_pane = checked
+        self._config.set("dual_pane", checked)
+        self._apply_view_mode()
+
+    def _apply_view_mode(self) -> None:
+        """将当前视图模式应用到所有标签页"""
+        for i in range(self._tabs.count()):
+            pair = self._tabs.widget(i)
+            if isinstance(pair, EditorPreviewPair):
+                pair.set_view_mode(self._view_mode, self._dual_pane)
+        # 预览可见时确保当前内容为最新渲染
+        pair = self._tabs.current_pair()
+        if pair and pair.is_preview_visible():
+            pair.render_now()
+
+    def _apply_view_mode_to_pair(self, pair: EditorPreviewPair) -> None:
+        """将当前视图模式应用到单个新建标签页"""
+        pair.set_view_mode(self._view_mode, self._dual_pane)
 
     def _toggle_file_tree(self, visible: bool) -> None:
         self._file_dock.setVisible(visible)

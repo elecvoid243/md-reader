@@ -25,6 +25,8 @@ _DEFAULTS: dict[str, Any] = {
     "show_file_tree": True,
     "show_toc": True,
     "scroll_sync": True,
+    "view_mode": "reading",   # reading（默认阅读模式）/ edit
+    "dual_pane": True,        # 编辑模式下是否双栏预览
     "render_delay_ms": 300,
     "tab_width": 4,
 }
