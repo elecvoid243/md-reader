@@ -394,12 +394,14 @@ class MainWindow(QMainWindow):
             self._status_file.setText(f"主题: {new_theme}")
 
     def _apply_editor_theme(self) -> None:
-        """将主题样式应用到所有编辑器"""
+        """将主题样式应用到所有编辑器（QSS + 绘制配色）"""
         style = self._theme_mgr.get_editor_style()
+        colors = self._theme_mgr.get_editor_colors()
         for i in range(self._tabs.count()):
             pair = self._tabs.widget(i)
             if isinstance(pair, EditorPreviewPair):
                 pair.editor.setStyleSheet(style)
+                pair.editor.set_theme_colors(colors)
 
     def _toggle_scroll_sync(self, enabled: bool) -> None:
         self._config.set("scroll_sync", enabled)
@@ -438,8 +440,9 @@ class MainWindow(QMainWindow):
             self._status_file.setText("未保存的文档")
             self.setWindowTitle("未命名 — MD Reader")
 
-        # 应用编辑器主题
+        # 应用编辑器主题（QSS + 绘制配色）
         pair.editor.setStyleSheet(self._theme_mgr.get_editor_style())
+        pair.editor.set_theme_colors(self._theme_mgr.get_editor_colors())
 
     def _on_heading_clicked(self, heading_id: str, level: int) -> None:
         """TOC 标题被点击"""

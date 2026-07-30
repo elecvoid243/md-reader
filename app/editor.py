@@ -151,6 +151,15 @@ class MarkdownEditor(QPlainTextEdit):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
 
+        # 主题配色（默认亮色，可被 set_theme_colors 覆盖）
+        self._theme_colors = {
+            "gutter_bg": "#f3f0e6",
+            "gutter_ink": "#b3ab96",
+            "current_line": "#f4f1e6",
+            "caret": "#0e6b5a",
+            "border": "#e8e3d6",
+        }
+
         # 行号区域
         self._line_area = LineNumberArea(self)
         self.blockCountChanged.connect(self._update_line_area_width)
@@ -171,6 +180,12 @@ class MarkdownEditor(QPlainTextEdit):
         self.setTabStopDistance(40)
         self.setLineWrapMode(QPlainTextEdit.WidgetWidth)
         self.setCenterOnScroll(True)
+
+    def set_theme_colors(self, colors: dict) -> None:
+        """更新主题配色并重绘（行号栏/当前行）"""
+        self._theme_colors.update(colors)
+        self._highlight_current_line()
+        self._line_area.update()
 
     def _setup_font(self, family: str, size: int) -> None:
         font = QFont(family, size)
@@ -201,7 +216,16 @@ class MarkdownEditor(QPlainTextEdit):
 
     def line_number_area_paint_event(self, event) -> None:
         painter = QPainter(self._line_area)
-        painter.fillRect(event.rect(), QColor("#f0f0f0"))
+        # 行号栏背景
+        painter.fillRect(event.rect(), QColor(self._theme_colors["gutter_bg"]))
+        # 行号栏与编辑区之间的细分隔线
+        painter.setPen(QColor(self._theme_colors["border"]))
+        painter.drawLine(
+            event.rect().right(),
+            event.rect().top(),
+            event.rect().right(),
+            event.rect().bottom(),
+        )
 
         block = self.firstVisibleBlock()
         block_number = block.blockNumber()
@@ -210,7 +234,7 @@ class MarkdownEditor(QPlainTextEdit):
         )
         bottom = top + int(self.blockBoundingRect(block).height())
 
-        painter.setPen(QColor("#999999"))
+        painter.setPen(QColor(self._theme_colors["gutter_ink"]))
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
                 number = str(block_number + 1)
@@ -234,7 +258,7 @@ class MarkdownEditor(QPlainTextEdit):
         selections = []
         if not self.isReadOnly():
             selection = QTextEdit.ExtraSelection()
-            selection.format.setBackground(QColor("#f5f5f5"))
+            selection.format.setBackground(QColor(self._theme_colors["current_line"]))
             selection.format.setProperty(QTextCharFormat.FullWidthSelection, True)
             selection.cursor = self.textCursor()
             selection.cursor.clearSelection()

@@ -151,9 +151,13 @@ gantt
 
 ## 图片
 
-（此处可插入本地或网络图片）
+支持本地图片与网络图片（拖拽或粘贴路径即可）：
 
-![示例图片](https://via.placeholder.com/400x200?text=MD+Reader)
+```markdown
+![描述](./images/screenshot.png)
+```
+
+> 提示：本地图片请使用相对路径或绝对路径引用。
 
 ---
 

@@ -1,10 +1,12 @@
 """
-theme_manager.py — 主题管理
+theme_manager.py — 主题管理（「墨与纸」设计系统）
 
-管理亮色/暗色主题的切换，同步应用到：
-- 编辑器 (QPlainTextEdit 样式)
-- 预览区 (JS 端 CSS 切换)
-- 主窗口 (QSS 样式表)
+以调色板 (palette) 为单一数据源，统一驱动：
+- 主窗口 QSS 样式表（菜单栏/工具栏/标签页/停靠栏/状态栏）
+- 编辑器配色（背景/行号栏/当前行/选区/光标）
+- 预览区 CSS 主题切换（JS 端）
+
+调色板与 resources/css/theme-*.css 保持同一设计语言。
 """
 
 from __future__ import annotations
@@ -13,181 +15,377 @@ from PyQt5.QtWidgets import QApplication
 
 from .config import Config
 
-# 编辑器亮色主题样式
-EDITOR_LIGHT_STYLE = """
-QPlainTextEdit {
-    background-color: #ffffff;
-    color: #24292e;
-    selection-background-color: #b3d7ff;
-    selection-color: #24292e;
-}
-"""
+# ══════════════════════════════════════════════
+#  调色板定义（与 CSS 主题同源）
+# ══════════════════════════════════════════════
 
-# 编辑器暗色主题样式
-EDITOR_DARK_STYLE = """
-QPlainTextEdit {
-    background-color: #1e1e1e;
-    color: #d4d4d4;
-    selection-background-color: #264f78;
-    selection-color: #d4d4d4;
+LIGHT_PALETTE = {
+    # 应用外壳
+    "chrome": "#e9e6de",  # 窗口/工具栏底色
+    "chrome_alt": "#e2ded4",  # 次级区域
+    "surface": "#fcfbf7",  # 面板/纸面
+    "inset": "#f3f0e8",  # 内嵌区域
+    # 文本
+    "ink": "#2b2822",
+    "ink_strong": "#1c1a15",
+    "ink_muted": "#7d7668",
+    "ink_faint": "#b0a896",
+    # 主色
+    "accent": "#0e6b5a",
+    "accent_strong": "#0a5546",
+    "accent_soft": "#dcebe5",
+    "amber": "#b8862b",
+    # 线条
+    "border": "#d8d2c2",
+    "border_strong": "#c9c2ae",
+    "hairline": "#e8e3d6",
+    # 交互
+    "hover": "#efebdf",
+    "pressed": "#e4dfd0",
+    "selection": "#cfe4db",
+    # 编辑器
+    "editor_bg": "#fcfbf7",
+    "gutter_bg": "#f3f0e6",
+    "gutter_ink": "#b3ab96",
+    "current_line": "#f4f1e6",
+    "caret": "#0e6b5a",
+    # 状态栏
+    "status_bg": "#0e6b5a",
+    "status_ink": "#eaf4f0",
+    # 滚动条
+    "scrollbar": "#cbc4b2",
+    "scrollbar_hov": "#b3ab96",
 }
-"""
 
-# 主窗口亮色 QSS
-WINDOW_LIGHT_QSS = """
-QMainWindow, QWidget {
-    background-color: #f5f5f5;
-    color: #333333;
+DARK_PALETTE = {
+    # 应用外壳
+    "chrome": "#14161a",
+    "chrome_alt": "#101216",
+    "surface": "#1e2126",
+    "inset": "#171a1e",
+    # 文本
+    "ink": "#d5d1c6",
+    "ink_strong": "#ece8dd",
+    "ink_muted": "#8b867a",
+    "ink_faint": "#5f5b51",
+    # 主色
+    "accent": "#4db6a2",
+    "accent_strong": "#6cc9b7",
+    "accent_soft": "#1d3833",
+    "amber": "#d9a94f",
+    # 线条
+    "border": "#2c3037",
+    "border_strong": "#3a3f47",
+    "hairline": "#262a30",
+    # 交互
+    "hover": "#262b32",
+    "pressed": "#2e343c",
+    "selection": "#26463f",
+    # 编辑器
+    "editor_bg": "#1e2126",
+    "gutter_bg": "#191c21",
+    "gutter_ink": "#57534a",
+    "current_line": "#252932",
+    "caret": "#4db6a2",
+    # 状态栏
+    "status_bg": "#0f5a4c",
+    "status_ink": "#dcefe9",
+    # 滚动条
+    "scrollbar": "#3d434c",
+    "scrollbar_hov": "#4d545f",
 }
-QMenuBar {
-    background-color: #f0f0f0;
-    color: #333333;
-}
-QMenuBar::item:selected {
-    background-color: #e0e0e0;
-}
-QMenu {
-    background-color: #ffffff;
-    color: #333333;
-    border: 1px solid #d0d0d0;
-}
-QMenu::item:selected {
-    background-color: #e8f0fe;
-}
-QToolBar {
-    background-color: #f0f0f0;
-    border: none;
-    spacing: 4px;
+
+
+def _build_qss(p: dict) -> str:
+    """由调色板生成整窗 QSS 样式表"""
+    return f"""
+/* ═══ 全局 ═══ */
+QMainWindow, QDialog {{
+    background-color: {p["chrome"]};
+    color: {p["ink"]};
+}}
+QWidget {{
+    color: {p["ink"]};
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}}
+
+/* ═══ 菜单栏 ═══ */
+QMenuBar {{
+    background-color: {p["chrome"]};
+    color: {p["ink_muted"]};
+    border-bottom: 1px solid {p["hairline"]};
     padding: 2px;
-}
-QStatusBar {
-    background-color: #f0f0f0;
-    color: #666666;
-}
-QTabWidget::pane {
-    border: 1px solid #d0d0d0;
-}
-QTabBar::tab {
-    background-color: #e8e8e8;
-    color: #555555;
-    padding: 6px 16px;
-    border: 1px solid #d0d0d0;
-    border-bottom: none;
-    margin-right: 2px;
-}
-QTabBar::tab:selected {
-    background-color: #ffffff;
-    color: #333333;
-}
-QTabBar::tab:hover {
-    background-color: #f0f0f0;
-}
-QTreeView {
-    background-color: #ffffff;
-    color: #333333;
-    border: 1px solid #d0d0d0;
-}
-QTreeView::item:selected {
-    background-color: #e8f0fe;
-}
-QTreeWidget {
-    background-color: #ffffff;
-    color: #333333;
-    border: 1px solid #d0d0d0;
-}
-QTreeWidget::item:selected {
-    background-color: #e8f0fe;
-}
-QSplitter::handle {
-    background-color: #d0d0d0;
-}
-"""
-
-# 主窗口暗色 QSS
-WINDOW_DARK_QSS = """
-QMainWindow, QWidget {
-    background-color: #252526;
-    color: #cccccc;
-}
-QMenuBar {
-    background-color: #2d2d2d;
-    color: #cccccc;
-}
-QMenuBar::item:selected {
-    background-color: #3c3c3c;
-}
-QMenu {
-    background-color: #2d2d2d;
-    color: #cccccc;
-    border: 1px solid #404040;
-}
-QMenu::item:selected {
-    background-color: #094771;
-}
-QToolBar {
-    background-color: #2d2d2d;
-    border: none;
-    spacing: 4px;
-    padding: 2px;
-}
-QStatusBar {
-    background-color: #007acc;
-    color: #ffffff;
-}
-QTabWidget::pane {
-    border: 1px solid #404040;
-}
-QTabBar::tab {
-    background-color: #2d2d2d;
-    color: #999999;
-    padding: 6px 16px;
-    border: 1px solid #404040;
-    border-bottom: none;
-    margin-right: 2px;
-}
-QTabBar::tab:selected {
-    background-color: #1e1e1e;
-    color: #ffffff;
-}
-QTabBar::tab:hover {
-    background-color: #333333;
-}
-QTreeView {
-    background-color: #252526;
-    color: #cccccc;
-    border: 1px solid #404040;
-}
-QTreeView::item:selected {
-    background-color: #094771;
-}
-QTreeWidget {
-    background-color: #252526;
-    color: #cccccc;
-    border: 1px solid #404040;
-}
-QTreeWidget::item:selected {
-    background-color: #094771;
-}
-QSplitter::handle {
-    background-color: #404040;
-}
-QScrollBar:vertical {
-    background-color: #1e1e1e;
-    width: 10px;
-}
-QScrollBar::handle:vertical {
-    background-color: #424242;
+    font-size: 13px;
+}}
+QMenuBar::item {{
+    padding: 5px 10px;
     border-radius: 5px;
-    min-height: 20px;
-}
-QScrollBar::handle:vertical:hover {
-    background-color: #4f4f4f;
-}
+    background: transparent;
+}}
+QMenuBar::item:selected {{
+    background-color: {p["hover"]};
+    color: {p["ink_strong"]};
+}}
+QMenuBar::item:pressed {{
+    background-color: {p["pressed"]};
+}}
+QMenu {{
+    background-color: {p["surface"]};
+    color: {p["ink"]};
+    border: 1px solid {p["border"]};
+    border-radius: 8px;
+    padding: 5px;
+}}
+QMenu::item {{
+    padding: 7px 28px 7px 24px;
+    border-radius: 5px;
+}}
+QMenu::item:selected {{
+    background-color: {p["accent_soft"]};
+    color: {p["accent_strong"]};
+}}
+QMenu::separator {{
+    height: 1px;
+    background: {p["hairline"]};
+    margin: 5px 12px;
+}}
+QMenu::indicator {{
+    width: 14px;
+    height: 14px;
+    margin-left: 6px;
+}}
+QMenu::indicator:checked {{
+    background: {p["accent"]};
+    border-radius: 3px;
+}}
+
+/* ═══ 工具栏 ═══ */
+QToolBar {{
+    background-color: {p["chrome"]};
+    border: none;
+    border-bottom: 1px solid {p["hairline"]};
+    spacing: 3px;
+    padding: 4px 6px;
+}}
+QToolButton {{
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 9px;
+    color: {p["ink_muted"]};
+    font-size: 13px;
+}}
+QToolButton:hover {{
+    background-color: {p["hover"]};
+    color: {p["ink_strong"]};
+}}
+QToolButton:pressed {{
+    background-color: {p["pressed"]};
+}}
+
+/* ═══ 标签页（现代下划线风格） ═══ */
+QTabWidget::pane {{
+    border: none;
+    background-color: {p["chrome_alt"]};
+}}
+QTabBar {{
+    background-color: {p["chrome"]};
+    qproperty-drawBase: 0;
+}}
+QTabBar::tab {{
+    background: transparent;
+    color: {p["ink_faint"]};
+    padding: 9px 20px 8px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-size: 13px;
+    min-width: 90px;
+}}
+QTabBar::tab:hover {{
+    color: {p["ink_muted"]};
+    background-color: {p["hover"]};
+}}
+QTabBar::tab:selected {{
+    color: {p["ink_strong"]};
+    border-bottom: 2px solid {p["accent"]};
+    background-color: {p["chrome_alt"]};
+    font-weight: 600;
+}}
+QTabBar::close-button {{
+    border-radius: 4px;
+    padding: 2px;
+}}
+QTabBar::close-button:hover {{
+    background-color: {p["pressed"]};
+}}
+
+/* ═══ 停靠栏（文件树 / TOC） ═══ */
+QDockWidget {{
+    color: {p["ink_muted"]};
+    titlebar-close-icon: none;
+    titlebar-normal-icon: none;
+    font-size: 12px;
+}}
+QDockWidget::title {{
+    background-color: {p["chrome"]};
+    color: {p["ink_muted"]};
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid {p["hairline"]};
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-size: 11px;
+}}
+QDockWidget::close-button, QDockWidget::float-button {{
+    background: transparent;
+    border: none;
+    padding: 2px;
+}}
+QDockWidget::close-button:hover, QDockWidget::float-button:hover {{
+    background-color: {p["hover"]};
+    border-radius: 4px;
+}}
+
+/* ═══ 树视图 ═══ */
+QTreeView, QTreeWidget {{
+    background-color: {p["surface"]};
+    alternate-background-color: {p["inset"]};
+    color: {p["ink"]};
+    border: none;
+    outline: none;
+    font-size: 13px;
+    padding: 4px;
+}}
+QTreeView::item {{
+    padding: 4px 6px;
+    border-radius: 5px;
+    color: {p["ink"]};
+}}
+QTreeView::item:hover {{
+    background-color: {p["hover"]};
+}}
+QTreeView::item:selected {{
+    background-color: {p["accent_soft"]};
+    color: {p["accent_strong"]};
+}}
+QTreeView::branch:has-children:!has-siblings:closed,
+QTreeView::branch:closed:has-children:has-siblings {{
+    image: none;
+}}
+
+/* ═══ 分割条 ═══ */
+QSplitter::handle {{
+    background-color: {p["hairline"]};
+}}
+QSplitter::handle:horizontal {{ width: 1px; }}
+QSplitter::handle:vertical {{ height: 1px; }}
+QSplitter::handle:hover {{
+    background-color: {p["accent"]};
+}}
+
+/* ═══ 状态栏 ═══ */
+QStatusBar {{
+    background-color: {p["status_bg"]};
+    color: {p["status_ink"]};
+    font-size: 12px;
+    border-top: none;
+}}
+QStatusBar QLabel {{
+    color: {p["status_ink"]};
+    padding: 0 10px;
+}}
+
+/* ═══ 滚动条 ═══ */
+QScrollBar:vertical {{
+    background: transparent;
+    width: 11px;
+    margin: 0;
+}}
+QScrollBar::handle:vertical {{
+    background: {p["scrollbar"]};
+    border-radius: 5px;
+    min-height: 24px;
+    margin: 2px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: {p["scrollbar_hov"]};
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0;
+}}
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 11px;
+}}
+QScrollBar::handle:horizontal {{
+    background: {p["scrollbar"]};
+    border-radius: 5px;
+    min-width: 24px;
+    margin: 2px;
+}}
+QScrollBar::handle:horizontal:hover {{
+    background: {p["scrollbar_hov"]};
+}}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+    width: 0;
+}}
+
+/* ═══ 消息框 / 对话框 ═══ */
+QMessageBox {{
+    background-color: {p["surface"]};
+}}
+QMessageBox QLabel {{
+    color: {p["ink"]};
+    font-size: 13px;
+}}
+QPushButton {{
+    background-color: {p["inset"]};
+    color: {p["ink"]};
+    border: 1px solid {p["border"]};
+    border-radius: 6px;
+    padding: 6px 18px;
+    font-size: 13px;
+}}
+QPushButton:hover {{
+    background-color: {p["hover"]};
+    border-color: {p["border_strong"]};
+}}
+QPushButton:pressed {{
+    background-color: {p["pressed"]};
+}}
+QPushButton:default {{
+    background-color: {p["accent"]};
+    color: #ffffff;
+    border-color: {p["accent_strong"]};
+}}
+QPushButton:default:hover {{
+    background-color: {p["accent_strong"]};
+}}
 """
+
+
+def _build_editor_qss(p: dict) -> str:
+    """生成编辑器 QSS（背景/选区/光标）"""
+    return f"""
+QPlainTextEdit {{
+    background-color: {p["editor_bg"]};
+    color: {p["ink"]};
+    selection-background-color: {p["selection"]};
+    selection-color: {p["ink_strong"]};
+    border: none;
+    outline: none;
+}}
+"""
+
+
+# ══════════════════════════════════════════════
+#  主题管理器
+# ══════════════════════════════════════════════
 
 
 class ThemeManager:
-    """主题管理器"""
+    """主题管理器：以调色板驱动全应用样式"""
 
     def __init__(self) -> None:
         self._config = Config()
@@ -197,21 +395,32 @@ class ThemeManager:
     def current_theme(self) -> str:
         return self._current_theme
 
+    @property
+    def palette(self) -> dict:
+        """当前主题的调色板"""
+        return DARK_PALETTE if self._current_theme == "dark" else LIGHT_PALETTE
+
     def apply_theme(self, theme_name: str, app: QApplication) -> None:
         """应用主题到整个应用"""
         self._current_theme = theme_name
         self._config.set("theme", theme_name)
-
-        if theme_name == "dark":
-            app.setStyleSheet(WINDOW_DARK_QSS)
-        else:
-            app.setStyleSheet(WINDOW_LIGHT_QSS)
+        p = self.palette
+        app.setStyleSheet(_build_qss(p))
 
     def get_editor_style(self) -> str:
-        """获取编辑器样式表"""
-        if self._current_theme == "dark":
-            return EDITOR_DARK_STYLE
-        return EDITOR_LIGHT_STYLE
+        """获取编辑器 QSS"""
+        return _build_editor_qss(self.palette)
+
+    def get_editor_colors(self) -> dict:
+        """获取编辑器绘制用色（行号栏/当前行等，供 paintEvent 使用）"""
+        p = self.palette
+        return {
+            "gutter_bg": p["gutter_bg"],
+            "gutter_ink": p["gutter_ink"],
+            "current_line": p["current_line"],
+            "caret": p["caret"],
+            "border": p["hairline"],
+        }
 
     def toggle(self, app: QApplication) -> str:
         """切换主题，返回新主题名"""

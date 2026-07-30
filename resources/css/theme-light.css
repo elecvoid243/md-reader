@@ -1,25 +1,70 @@
 /**
- * theme-light.css — 亮色主题（默认）
+ * theme-light.css — 「墨与纸 · 昼」亮色主题
+ *
+ * 设计语言：编辑/文学气质。温暖的纸白悬浮于浅灰桌面之上，
+ * 松绿 (pine teal) 为主色，琥珀 (amber) 作点睛。
  */
 
 :root {
-    --bg-color: #ffffff;
-    --text-color: #24292e;
-    --heading-color: #1b1f23;
-    --link-color: #0366d6;
-    --code-bg: #f6f8fa;
-    --border-color: #e1e4e8;
-    --blockquote-color: #6a737d;
-    --blockquote-border: #dfe2e5;
-    --blockquote-bg: #fafbfc;
-    --table-border: #dfe2e5;
-    --table-stripe: #f6f8fa;
-    --table-header-bg: #f0f2f5;
-    --scrollbar-color: #c1c1c1;
-    --scrollbar-hover: #a8a8a8;
+    /* ── 表面层次（桌面 → 纸面） ── */
+    --bg-desk:        #e9e6de;   /* 桌面：温暖浅灰 */
+    --bg-desk-edge:   #e2ded4;   /* 桌面渐变边缘 */
+    --bg-sheet:       #fcfbf7;   /* 纸面：近白暖调 */
+    --bg-inset:       #f3f0e8;   /* 内嵌区域（代码块/表头） */
+
+    /* ── 文本墨色 ── */
+    --ink:            #2b2822;   /* 正文墨色 */
+    --ink-strong:     #1c1a15;   /* 标题重墨 */
+    --ink-muted:      #7d7668;   /* 次要文本 */
+    --ink-faint:      #b0a896;   /* 弱化文本（行号/标签） */
+
+    /* ── 主色：松绿 ── */
+    --accent:         #0e6b5a;
+    --accent-strong:  #0a5546;
+    --accent-soft:    #dcebe5;
+    --accent-ink:     #0c5a4b;
+
+    /* ── 点睛：琥珀 ── */
+    --amber:          #b8862b;
+    --amber-soft:     #f5ead2;
+
+    /* ── 线条与分隔 ── */
+    --border:         #e4dfd2;
+    --border-strong:  #d3ccbb;
+    --hairline:       #ece8dc;
+
+    /* ── 语义色 ── */
+    --link:           #0e6b5a;
+    --code-ink:       #9c4a1a;   /* 行内代码：赭红 */
+    --code-bg:        #f2efe6;
+    --quote-bg:       #f6f3ea;
+    --quote-ink:      #6f6858;
+    --selection:      #cfe4db;
+    --mark:           #f7e8b5;
+
+    /* ── 表格 ── */
+    --table-border:   #e2dccd;
+    --table-stripe:   #f8f5ec;
+    --table-head:     #efeadd;
+    --table-hover:    #f1ecdf;
+
+    /* ── 阴影 ── */
+    --shadow-sheet:   0 1px 2px rgba(60, 52, 36, 0.05),
+                      0 4px 12px rgba(60, 52, 36, 0.06),
+                      0 16px 40px rgba(60, 52, 36, 0.07);
+    --shadow-pop:     0 2px 8px rgba(60, 52, 36, 0.12);
+
+    /* ── 滚动条 ── */
+    --scrollbar:      #cbc4b2;
+    --scrollbar-hover:#b3ab96;
+
+    color-scheme: light;
 }
 
 body {
-    background-color: var(--bg-color);
-    color: var(--text-color);
+    background:
+        radial-gradient(1200px 600px at 50% -100px, #f0ede4 0%, transparent 70%),
+        linear-gradient(180deg, var(--bg-desk) 0%, var(--bg-desk-edge) 100%);
+    background-attachment: fixed;
+    color: var(--ink);
 }

@@ -128,6 +128,9 @@ async function renderMarkdown(mdText) {
             }
         });
 
+        // 6.5 为代码块添加语言标签
+        addCodeBlockHeaders(content);
+
         // 7. 为标题添加锚点 id（用于 TOC 跳转）
         addHeadingIds(content);
 
@@ -146,6 +149,26 @@ async function renderMarkdown(mdText) {
 }
 
 /* ========== 辅助函数 ========== */
+
+/** 为代码块添加语言标签（右上角小标签） */
+function addCodeBlockHeaders(container) {
+    container.querySelectorAll('pre').forEach(function (pre) {
+        const code = pre.querySelector('code');
+        if (!code) return;
+        const match = code.className.match(/language-([\w+-]+)/);
+        const lang = match ? match[1] : '';
+        if (lang === 'mermaid') return;
+        if (lang) {
+            pre.classList.add('has-lang');
+            if (!pre.querySelector('.code-lang')) {
+                const label = document.createElement('span');
+                label.className = 'code-lang';
+                label.textContent = lang;
+                pre.appendChild(label);
+            }
+        }
+    });
+}
 
 /** HTML 实体解码 */
 function decodeHtml(text) {
