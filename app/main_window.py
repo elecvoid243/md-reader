@@ -13,6 +13,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
     QAction,
+    QActionGroup,
     QApplication,
     QDockWidget,
     QFileDialog,
@@ -178,19 +179,42 @@ class MainWindow(QMainWindow):
         # ── 视图菜单 ──
         view_menu = menubar.addMenu("视图(&V)")
 
-        self._act_edit_mode = QAction("编辑模式", self)
-        self._act_edit_mode.setCheckable(True)
-        self._act_edit_mode.setChecked(self._view_mode == "edit")
-        self._act_edit_mode.setShortcut("Ctrl+Shift+R")
-        self._act_edit_mode.setStatusTip("在阅读模式与编辑模式之间切换")
-        self._act_edit_mode.toggled.connect(self._on_edit_mode_toggled)
-        view_menu.addAction(self._act_edit_mode)
+        # 三种互斥的视图模式
+        self._mode_group = QActionGroup(self)
+        self._mode_group.setExclusive(True)
+
+        self._act_mode_reading = QAction("阅读模式", self)
+        self._act_mode_reading.setCheckable(True)
+        self._act_mode_reading.setChecked(self._view_mode == "reading")
+        self._act_mode_reading.setShortcut("Ctrl+Shift+R")
+        self._act_mode_reading.setStatusTip("仅显示渲染结果（只读）")
+        self._act_mode_reading.triggered.connect(lambda: self._set_mode("reading"))
+        self._mode_group.addAction(self._act_mode_reading)
+        view_menu.addAction(self._act_mode_reading)
+
+        self._act_mode_instant = QAction("即时渲染", self)
+        self._act_mode_instant.setCheckable(True)
+        self._act_mode_instant.setChecked(self._view_mode == "instant")
+        self._act_mode_instant.setShortcut("Ctrl+Shift+I")
+        self._act_mode_instant.setStatusTip("在渲染视图中直接编辑（Typora 式）")
+        self._act_mode_instant.triggered.connect(lambda: self._set_mode("instant"))
+        self._mode_group.addAction(self._act_mode_instant)
+        view_menu.addAction(self._act_mode_instant)
+
+        self._act_mode_source = QAction("源码编辑", self)
+        self._act_mode_source.setCheckable(True)
+        self._act_mode_source.setChecked(self._view_mode == "edit")
+        self._act_mode_source.setShortcut("Ctrl+Shift+M")
+        self._act_mode_source.setStatusTip("编辑 Markdown 源码（可双栏预览）")
+        self._act_mode_source.triggered.connect(lambda: self._set_mode("edit"))
+        self._mode_group.addAction(self._act_mode_source)
+        view_menu.addAction(self._act_mode_source)
 
         self._act_dual_pane = QAction("双栏预览", self)
         self._act_dual_pane.setCheckable(True)
         self._act_dual_pane.setChecked(self._dual_pane)
         self._act_dual_pane.setShortcut("Ctrl+Shift+P")
-        self._act_dual_pane.setStatusTip("编辑模式下同时显示预览")
+        self._act_dual_pane.setStatusTip("源码编辑模式下同时显示预览")
         self._act_dual_pane.setEnabled(self._view_mode == "edit")
         self._act_dual_pane.toggled.connect(self._on_dual_pane_toggled)
         view_menu.addAction(self._act_dual_pane)
@@ -244,7 +268,9 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
 
         # 视图模式切换（最醒目，置于最前）
-        toolbar.addAction(self._act_edit_mode)
+        toolbar.addAction(self._act_mode_reading)
+        toolbar.addAction(self._act_mode_instant)
+        toolbar.addAction(self._act_mode_source)
         toolbar.addAction(self._act_dual_pane)
         toolbar.addSeparator()
         toolbar.addAction(self._act_open)
@@ -404,28 +430,32 @@ class MainWindow(QMainWindow):
     #  视图切换
     # ──────────────────────────────────────────
 
-    def _on_edit_mode_toggled(self, checked: bool) -> None:
-        """阅读模式 ↔ 编辑模式 切换"""
-        self._view_mode = "edit" if checked else "reading"
-        self._config.set("view_mode", self._view_mode)
-        # 双栏开关仅在编辑模式下有意义
-        self._act_dual_pane.setEnabled(checked)
+    def _set_mode(self, mode: str) -> None:
+        """切换视图模式（阅读 / 即时渲染 / 源码编辑）"""
+        self._view_mode = mode
+        self._config.set("view_mode", mode)
+        # 双栏开关仅在源码编辑模式下有意义
+        self._act_dual_pane.setEnabled(mode == "edit")
         self._apply_view_mode()
-        mode_text = "编辑模式" if checked else "阅读模式"
-        self.statusBar().showMessage(mode_text, 2500)
+        names = {"reading": "阅读模式", "instant": "即时渲染", "edit": "源码编辑"}
+        self.statusBar().showMessage(names.get(mode, mode), 2500)
 
     def _on_dual_pane_toggled(self, checked: bool) -> None:
-        """编辑模式下双栏预览开关"""
+        """源码编辑模式下双栏预览开关"""
         self._dual_pane = checked
         self._config.set("dual_pane", checked)
         self._apply_view_mode()
 
     def _apply_view_mode(self) -> None:
         """将当前视图模式应用到所有标签页"""
+        theme_name = self._theme_mgr.current_theme
         for i in range(self._tabs.count()):
             pair = self._tabs.widget(i)
             if isinstance(pair, EditorPreviewPair):
                 pair.set_view_mode(self._view_mode, self._dual_pane)
+                # 同步 Vditor 主题（若已创建）
+                if pair.vditor_pane is not None:
+                    pair.vditor_pane.set_theme(theme_name)
         # 预览可见时确保当前内容为最新渲染
         pair = self._tabs.current_pair()
         if pair and pair.is_preview_visible():
@@ -434,6 +464,8 @@ class MainWindow(QMainWindow):
     def _apply_view_mode_to_pair(self, pair: EditorPreviewPair) -> None:
         """将当前视图模式应用到单个新建标签页"""
         pair.set_view_mode(self._view_mode, self._dual_pane)
+        if pair.vditor_pane is not None:
+            pair.vditor_pane.set_theme(self._theme_mgr.current_theme)
 
     def _toggle_file_tree(self, visible: bool) -> None:
         self._file_dock.setVisible(visible)
@@ -456,14 +488,17 @@ class MainWindow(QMainWindow):
             self._status_file.setText(f"主题: {new_theme}")
 
     def _apply_editor_theme(self) -> None:
-        """将主题样式应用到所有编辑器（QSS + 绘制配色）"""
+        """将主题样式应用到所有编辑器（QSS + 绘制配色 + Vditor）"""
         style = self._theme_mgr.get_editor_style()
         colors = self._theme_mgr.get_editor_colors()
+        theme_name = self._theme_mgr.current_theme
         for i in range(self._tabs.count()):
             pair = self._tabs.widget(i)
             if isinstance(pair, EditorPreviewPair):
                 pair.editor.setStyleSheet(style)
                 pair.editor.set_theme_colors(colors)
+                if pair.vditor_pane is not None:
+                    pair.vditor_pane.set_theme(theme_name)
 
     def _toggle_scroll_sync(self, enabled: bool) -> None:
         self._config.set("scroll_sync", enabled)

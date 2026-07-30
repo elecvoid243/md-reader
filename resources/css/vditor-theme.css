@@ -1,0 +1,200 @@
+/**
+ * vditor-theme.css — 将「墨与纸」设计系统适配到 Vditor
+ *
+ * 复用 theme-light.css / theme-dark.css 定义的 CSS 变量，
+ * 让 Vditor 即时渲染界面与预览纸面保持一致的视觉语言。
+ */
+
+/* ══════════════ 容器：纸面 ══════════════ */
+
+body {
+    background: var(--bg-sheet);
+}
+
+.vditor {
+    background: var(--bg-sheet) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    color: var(--ink);
+    font-family: var(--font-body, "Segoe UI", "Microsoft YaHei", sans-serif);
+}
+
+/* ══════════════ 工具栏 ══════════════ */
+
+.vditor-toolbar {
+    background: var(--bg-desk, #e9e6de) !important;
+    border-bottom: 1px solid var(--hairline) !important;
+    padding: 4px 8px !important;
+}
+
+.vditor-toolbar__item svg {
+    fill: var(--ink-muted) !important;
+    color: var(--ink-muted) !important;
+}
+
+.vditor-toolbar__item:hover svg,
+.vditor-toolbar__item--current svg {
+    fill: var(--accent) !important;
+    color: var(--accent) !important;
+}
+
+.vditor-toolbar__item:hover {
+    background: var(--hover, rgba(0, 0, 0, 0.04)) !important;
+    border-radius: 5px;
+}
+
+/* ══════════════ 编辑区背景 ══════════════ */
+
+.vditor-ir {
+    background: var(--bg-sheet) !important;
+    color: var(--ink) !important;
+    padding: 32px 0 !important;
+}
+
+/* 内容居中，限制阅读宽度（与预览纸面一致） */
+.vditor-reset {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 0 72px !important;
+    font-family: var(--font-body, "Segoe UI", "Microsoft YaHei", sans-serif);
+    font-size: 16px;
+    line-height: 1.75;
+    color: var(--ink);
+}
+
+@media (max-width: 960px) {
+    .vditor-reset { padding: 0 24px !important; }
+}
+
+/* ══════════════ 排版：标题（衬线 × 重墨） ══════════════ */
+
+.vditor-reset h1,
+.vditor-reset h2,
+.vditor-reset h3,
+.vditor-reset h4,
+.vditor-reset h5,
+.vditor-reset h6 {
+    font-family: var(--font-display, Georgia, "Songti SC", "SimSun", serif) !important;
+    color: var(--ink-strong) !important;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+
+.vditor-reset h1 {
+    font-size: 2.2em !important;
+    border-bottom: 2px solid var(--border-strong);
+    padding-bottom: 0.4em;
+}
+.vditor-reset h2 {
+    font-size: 1.65em !important;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 0.3em;
+}
+.vditor-reset h3 { font-size: 1.3em !important; }
+.vditor-reset h4 { font-size: 1.1em !important; }
+
+/* ══════════════ 行内元素 ══════════════ */
+
+.vditor-reset a { color: var(--link) !important; }
+.vditor-reset strong { color: var(--ink-strong); }
+
+.vditor-reset code:not(.hljs) {
+    color: var(--code-ink) !important;
+    background: var(--code-bg) !important;
+    border-radius: 4px;
+}
+
+/* ══════════════ 代码块 ══════════════ */
+
+.vditor-reset pre {
+    background: var(--code-bg) !important;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.vditor-reset pre code {
+    background: transparent !important;
+}
+
+/* ══════════════ 引用 ══════════════ */
+
+.vditor-reset blockquote {
+    color: var(--quote-ink) !important;
+    background: var(--quote-bg) !important;
+    border-left: 3px solid var(--accent) !important;
+    border-radius: 0 8px 8px 0;
+}
+
+/* ══════════════ 表格 ══════════════ */
+
+.vditor-reset table th {
+    background: var(--table-head) !important;
+    border-color: var(--table-border) !important;
+}
+.vditor-reset table td {
+    border-color: var(--table-border) !important;
+}
+.vditor-reset table tbody tr:nth-child(2n) {
+    background: var(--table-stripe);
+}
+
+/* ══════════════ 分隔线 ══════════════ */
+
+.vditor-reset hr {
+    border: none;
+    border-top: 1px solid var(--border-strong);
+}
+
+/* ══════════════ IR 模式专属：语法标记弱化 ══════════════ */
+
+.vditor-ir__marker {
+    color: var(--ink-faint) !important;
+    opacity: 0.6;
+}
+
+.vditor-ir__marker--pre {
+    color: var(--ink-faint) !important;
+}
+
+/* 当前编辑块高亮 */
+.vditor-ir__node--expand {
+    background: var(--current-line, rgba(0, 0, 0, 0.02)) !important;
+    border-radius: 6px;
+}
+
+/* 选区颜色 */
+.vditor-ir ::selection {
+    background: var(--selection);
+}
+
+/* ══════════════ KaTeX / Mermaid 容器 ══════════════ */
+
+.vditor-reset .katex-display {
+    background: var(--bg-inset);
+    border-radius: 8px;
+    padding: 10px 0;
+}
+
+/* ══════════════ 滚动条 ══════════════ */
+
+.vditor-ir::-webkit-scrollbar { width: 10px; }
+.vditor-ir::-webkit-scrollbar-thumb {
+    background: var(--scrollbar);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+.vditor-ir::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-hover);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+}
+
+/* ══════════════ 占位符 ══════════════ */
+
+.vditor-reset:empty::before,
+.vditor-ir .vditor-reset[data-placeholder]::before {
+    color: var(--ink-faint);
+    font-style: italic;
+}

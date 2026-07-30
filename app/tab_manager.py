@@ -10,10 +10,11 @@ from __future__ import annotations
 import os
 
 from PyQt5.QtCore import QTimer, pyqtSignal
-from PyQt5.QtWidgets import QTabWidget, QSplitter, QWidget
+from PyQt5.QtWidgets import QSplitter, QTabWidget, QWidget
 
 from .editor import MarkdownEditor
 from .preview import PreviewPane
+from .vditor_pane import VditorPane
 
 
 class EditorPreviewPair(QWidget):
@@ -23,8 +24,9 @@ class EditorPreviewPair(QWidget):
         super().__init__(parent)
         self.file_path: str | None = None
         self.is_dirty: bool = False
-        self.view_mode: str = "reading"  # reading / edit
-        self.dual_pane: bool = True  # 编辑模式下是否显示预览
+        self.view_mode: str = "reading"  # reading / edit / instant
+        self.dual_pane: bool = True  # 源码编辑模式下是否显示预览
+        self._vditor_pane: VditorPane | None = None  # 懒加载
 
         # 分割器：左编辑 右预览
         self._splitter = QSplitter()
@@ -45,6 +47,11 @@ class EditorPreviewPair(QWidget):
         self._debounce.setSingleShot(True)
         self._debounce.timeout.connect(self._do_render)
 
+        # Vditor → 编辑器 防抖同步定时器（即时渲染模式下保持编辑器为最新数据源）
+        self._vditor_sync_timer = QTimer()
+        self._vditor_sync_timer.setSingleShot(True)
+        self._vditor_sync_timer.timeout.connect(self._sync_vditor_to_editor)
+
         # 编辑区文本变化 → 触发防抖渲染
         self.editor.textChanged.connect(self._on_text_changed)
 
@@ -58,6 +65,9 @@ class EditorPreviewPair(QWidget):
         self._debounce.start(300)  # 300ms 防抖
 
     def _do_render(self) -> None:
+        # 预览不可见时跳过渲染（即时渲染模式 / 单栏源码模式）
+        if not self.is_preview_visible():
+            return
         text = self.editor.get_text()
         self.preview.render_markdown(text)
 
@@ -88,24 +98,101 @@ class EditorPreviewPair(QWidget):
         设置视图模式
 
         Args:
-            mode: "reading"（仅预览）或 "edit"（编辑）
-            dual_pane: 编辑模式下是否同时显示预览
+            mode: "reading"（仅预览）/ "edit"（源码编辑）/ "instant"（即时渲染）
+            dual_pane: 源码编辑模式下是否同时显示预览
         """
+        if mode == self.view_mode and dual_pane == self.dual_pane:
+            return
+
+        # 离开即时渲染模式：需先异步取回 Vditor 内容，再切换
+        if (
+            self.view_mode == "instant"
+            and mode != "instant"
+            and self._vditor_pane is not None
+        ):
+            self.view_mode = mode
+            self.dual_pane = dual_pane
+            self._vditor_pane.get_content(
+                lambda md: self._finish_leave_instant(md, mode, dual_pane)
+            )
+            return
+
+        self._apply_mode(mode, dual_pane)
+
+    def _finish_leave_instant(self, md: str | None, mode: str, dual_pane: bool) -> None:
+        """从即时渲染切出：把 Vditor 内容同步回编辑器后再应用目标模式"""
+        if md is not None:
+            self.editor.set_text(md)
+        self._apply_mode(mode, dual_pane)
+
+    def _apply_mode(self, mode: str, dual_pane: bool) -> None:
+        """实际应用模式：控制三个面板的显隐"""
         self.view_mode = mode
         self.dual_pane = dual_pane
 
         if mode == "reading":
             # 阅读模式：仅预览，全宽
+            self._hide_vditor()
             self.editor.hide()
             self.preview.show()
-        else:
-            # 编辑模式：编辑器始终可见
+            self.render_now()
+        elif mode == "edit":
+            # 源码编辑：编辑器可见，预览按 dual_pane 决定
+            self._hide_vditor()
             self.editor.show()
             if dual_pane:
                 self.preview.show()
                 self._restore_split()
+                self.render_now()
             else:
                 self.preview.hide()
+        elif mode == "instant":
+            # 即时渲染：仅 Vditor，把编辑器内容推入
+            self.editor.hide()
+            self.preview.hide()
+            self._ensure_vditor()
+            self._vditor_pane.show()
+            self._vditor_pane.set_content(self.editor.get_text())
+
+    def _ensure_vditor(self) -> None:
+        """懒加载创建 VditorPane（首次进入即时渲染时）"""
+        if self._vditor_pane is None:
+            self._vditor_pane = VditorPane()
+            self._splitter.addWidget(self._vditor_pane)
+            self._vditor_pane.input_changed.connect(self._on_vditor_input)
+
+    def _hide_vditor(self) -> None:
+        if self._vditor_pane is not None:
+            self._vditor_pane.hide()
+
+    def _on_vditor_input(self) -> None:
+        """Vditor 中用户输入 → 标记脏状态 + 启动防抖同步"""
+        self.is_dirty = True
+        self._vditor_sync_timer.start(600)
+
+    def _sync_vditor_to_editor(self) -> None:
+        """把 Vditor 内容同步回编辑器（保持编辑器为最新数据源）"""
+        if self._vditor_pane is not None and self.view_mode == "instant":
+            self._vditor_pane.get_content(self._apply_vditor_content)
+
+    def _apply_vditor_content(self, md: str | None) -> None:
+        if md is not None:
+            # 阻断 textChanged 引发的重复渲染（预览此时不可见）
+            self.editor.set_text(md)
+
+    def get_current_content(self, callback) -> None:
+        """
+        获取当前内容（即时渲染模式从 Vditor 异步取，否则从编辑器同步取）。
+        用于保存等需要精确内容的场景。
+        """
+        if self.view_mode == "instant" and self._vditor_pane is not None:
+            self._vditor_pane.get_content(callback)
+        else:
+            callback(self.editor.get_text())
+
+    @property
+    def vditor_pane(self) -> VditorPane | None:
+        return self._vditor_pane
 
     def _restore_split(self) -> None:
         """恢复双栏的合理分割比例"""
@@ -117,7 +204,11 @@ class EditorPreviewPair(QWidget):
 
     def is_preview_visible(self) -> bool:
         """预览面板当前是否可见"""
-        return self.view_mode == "reading" or self.dual_pane
+        if self.view_mode == "reading":
+            return True
+        if self.view_mode == "edit":
+            return self.dual_pane
+        return False  # instant 模式不显示独立预览
 
     def set_scroll_sync_enabled(self, enabled: bool) -> None:
         if enabled:
@@ -212,9 +303,36 @@ class TabManager(QTabWidget):
             if reply == QMessageBox.Cancel:
                 return
             if reply == QMessageBox.Save:
-                self._save_pair(pair)
+                # 保存完成后再关闭（即时渲染模式为异步）
+                self._save_pair_then_close(pair)
+                return
 
-        self.removeTab(index)
+        self._remove_pair(pair)
+
+    def _save_pair_then_close(self, pair: EditorPreviewPair) -> None:
+        """保存（必要时先选路径）并在完成后关闭标签页"""
+        if not pair.file_path:
+            from PyQt5.QtWidgets import QFileDialog
+
+            path, _ = QFileDialog.getSaveFileName(
+                self, "保存文件", "", "Markdown 文件 (*.md);;所有文件 (*)"
+            )
+            if not path:
+                return  # 取消则不关闭
+            pair.file_path = path
+
+        pair.get_current_content(lambda content: self._finish_close(pair, content))
+
+    def _finish_close(self, pair: EditorPreviewPair, content: str | None) -> None:
+        self._write_pair(pair, content)
+        self._remove_pair(pair)
+
+    def _remove_pair(self, pair: EditorPreviewPair) -> None:
+        """从标签栏移除并销毁"""
+        for i in range(self.count()):
+            if self.widget(i) is pair:
+                self.removeTab(i)
+                break
         pair.deleteLater()
 
     def current_pair(self) -> EditorPreviewPair | None:
@@ -243,7 +361,7 @@ class TabManager(QTabWidget):
         return "未命名"
 
     def _save_pair(self, pair: EditorPreviewPair) -> bool:
-        """保存标签页内容到文件"""
+        """保存标签页内容到文件（即时渲染模式下异步从 Vditor 取值）"""
         if not pair.file_path:
             from PyQt5.QtWidgets import QFileDialog
 
@@ -254,18 +372,24 @@ class TabManager(QTabWidget):
                 return False
             pair.file_path = path
 
+        # 取当前内容后写入（即时渲染模式为异步回调）
+        pair.get_current_content(lambda content: self._write_pair(pair, content))
+        return True
+
+    def _write_pair(self, pair: EditorPreviewPair, content: str | None) -> None:
+        """实际写盘并更新状态"""
+        if content is None or not pair.file_path:
+            return
         try:
             with open(pair.file_path, "w", encoding="utf-8") as f:
-                f.write(pair.editor.get_text())
-            pair.is_dirty = False
-            # 更新标题
-            for i in range(self.count()):
-                if self.widget(i) is pair:
-                    self.update_title(i)
-                    break
-            return True
+                f.write(content)
         except OSError:
-            return False
+            return
+        pair.is_dirty = False
+        for i in range(self.count()):
+            if self.widget(i) is pair:
+                self.update_title(i)
+                break
 
     def save_current(self) -> bool:
         """保存当前标签页"""

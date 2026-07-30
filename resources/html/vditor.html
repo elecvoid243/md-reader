@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Vditor 样式 -->
+    <link rel="stylesheet" href="../vditor/dist/index.css">
+    <!-- 「墨与纸」主题变量 + Vditor 适配 -->
+    <link rel="stylesheet" href="../css/theme-light.css" id="theme-stylesheet">
+    <link rel="stylesheet" href="../css/vditor-theme.css">
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        #vditor { height: 100vh; border: none; }
+    </style>
+</head>
+<body>
+    <div id="vditor"></div>
+
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script src="../vditor/dist/index.min.js"></script>
+    <script>
+        /* ===== Python ↔ JS 桥接 ===== */
+        window.bridge = null;
+        window.vditor = null;
+        window.vditorReady = false;
+        var pendingContent = null;
+
+        if (typeof QWebChannel !== 'undefined') {
+            new QWebChannel(qt.webChannelTransport, function (channel) {
+                window.bridge = channel.objects.bridge;
+            });
+        }
+
+        /* ===== 工具栏配置（精简实用） ===== */
+        var toolbar = [
+            'emoji', 'headings', 'bold', 'italic', 'strike', '|',
+            'list', 'ordered-list', 'check', '|',
+            'quote', 'code', 'inline-code', '|',
+            'link', 'table', '|',
+            'undo', 'redo', '|',
+            'edit-mode', 'outline', 'fullscreen'
+        ];
+
+        /* ===== 初始化 Vditor（即时渲染 IR 模式） ===== */
+        window.vditor = new Vditor('vditor', {
+            cdn: '../vditor',
+            mode: 'ir',                    // 即时渲染：Typora 式体验
+            height: '100%',
+            toolbar: toolbar,
+            cache: { enable: false },      // 禁用本地缓存（由 Python 管理文件）
+            undoDelay: 500,
+            placeholder: '开始写作…（支持 Markdown 语法即时渲染）',
+            preview: {
+                delay: 300,
+                math: { engine: 'KaTeX' },
+                markdown: {
+                    mermaid: { enable: true },
+                    toc: true,
+                },
+                hljs: { style: 'github', lineNumber: false },
+            },
+            hint: { emoji: {} },
+            after: function () {
+                window.vditorReady = true;
+                // 应用待处理内容
+                if (pendingContent !== null) {
+                    window.vditor.setValue(pendingContent);
+                    pendingContent = null;
+                }
+                if (window.bridge) window.bridge.onReady();
+            },
+            input: function () {
+                // 内容变化通知（用于脏状态标记）
+                if (window.bridge) window.bridge.onInput();
+            },
+        });
+
+        /* ===== 供 Python 调用的接口 ===== */
+
+        // 设置内容（未就绪时缓存）
+        window.setVditorContent = function (md) {
+            if (window.vditorReady && window.vditor) {
+                window.vditor.setValue(md);
+            } else {
+                pendingContent = md;
+            }
+        };
+
+        // 获取内容
+        window.getVditorContent = function () {
+            return window.vditor ? window.vditor.getValue() : '';
+        };
+
+        // 切换主题（dark / light）
+        window.setVditorTheme = function (themeName) {
+            var link = document.getElementById('theme-stylesheet');
+            if (themeName === 'dark') {
+                link.href = '../css/theme-dark.css';
+                document.body.classList.add('dark-theme');
+                if (window.vditor) window.vditor.setTheme('dark');
+            } else {
+                link.href = '../css/theme-light.css';
+                document.body.classList.remove('dark-theme');
+                if (window.vditor) window.vditor.setTheme('classic');
+            }
+        };
+
+        // 聚焦编辑器
+        window.focusVditor = function () {
+            if (window.vditor) window.vditor.focus();
+        };
+    </script>
+</body>
+</html>
