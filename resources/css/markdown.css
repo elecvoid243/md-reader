@@ -1,0 +1,236 @@
+/**
+ * markdown.css — Markdown 排版样式（仿 Typora / GitHub 风格）
+ * 使用 CSS 变量实现主题切换，变量定义在 theme-light.css / theme-dark.css
+ */
+
+/* ========== 基础排版 ========== */
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+        sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    font-size: 16px;
+    line-height: 1.7;
+    word-wrap: break-word;
+}
+
+#content {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 30px 40px 80px;
+}
+
+/* ========== 标题 ========== */
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--heading-color);
+}
+
+.markdown-body h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border-color); }
+.markdown-body h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border-color); }
+.markdown-body h3 { font-size: 1.25em; }
+.markdown-body h4 { font-size: 1em; }
+.markdown-body h5 { font-size: 0.875em; }
+.markdown-body h6 { font-size: 0.85em; color: var(--blockquote-color); }
+
+/* ========== 段落与文本 ========== */
+
+.markdown-body p { margin-top: 0; margin-bottom: 16px; }
+
+.markdown-body a {
+    color: var(--link-color);
+    text-decoration: none;
+}
+.markdown-body a:hover { text-decoration: underline; }
+
+.markdown-body strong { font-weight: 600; }
+
+.markdown-body hr {
+    height: 0.25em;
+    padding: 0;
+    margin: 24px 0;
+    background-color: var(--border-color);
+    border: 0;
+}
+
+/* ========== 列表 ========== */
+
+.markdown-body ul,
+.markdown-body ol {
+    margin-top: 0;
+    margin-bottom: 16px;
+    padding-left: 2em;
+}
+
+.markdown-body li { margin-top: 0.25em; }
+.markdown-body li + li { margin-top: 0.25em; }
+
+/* 任务列表 */
+.markdown-body input[type="checkbox"] {
+    margin-right: 0.5em;
+}
+
+/* ========== 引用 ========== */
+
+.markdown-body blockquote {
+    margin: 0 0 16px 0;
+    padding: 0.5em 1em;
+    color: var(--blockquote-color);
+    border-left: 0.25em solid var(--blockquote-border);
+    background-color: var(--blockquote-bg, transparent);
+}
+
+.markdown-body blockquote > :first-child { margin-top: 0; }
+.markdown-body blockquote > :last-child { margin-bottom: 0; }
+
+/* ========== 代码 ========== */
+
+.markdown-body code {
+    padding: 0.2em 0.4em;
+    margin: 0;
+    font-size: 85%;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    background-color: var(--code-bg);
+    border-radius: 4px;
+}
+
+.markdown-body pre {
+    margin-top: 0;
+    margin-bottom: 16px;
+    padding: 16px;
+    overflow: auto;
+    font-size: 85%;
+    line-height: 1.5;
+    background-color: var(--code-bg);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.markdown-body pre code {
+    padding: 0;
+    margin: 0;
+    font-size: 100%;
+    background: transparent;
+    border: 0;
+}
+
+/* ========== 表格 ========== */
+
+.markdown-body table {
+    border-spacing: 0;
+    border-collapse: collapse;
+    margin-top: 0;
+    margin-bottom: 16px;
+    width: auto;
+    overflow: auto;
+    display: block;
+}
+
+.markdown-body table th {
+    font-weight: 600;
+    padding: 6px 13px;
+    border: 1px solid var(--table-border);
+    background-color: var(--table-header-bg, var(--code-bg));
+}
+
+.markdown-body table td {
+    padding: 6px 13px;
+    border: 1px solid var(--table-border);
+}
+
+.markdown-body table tr:nth-child(2n) {
+    background-color: var(--table-stripe);
+}
+
+/* ========== 图片 ========== */
+
+.markdown-body img {
+    max-width: 100%;
+    box-sizing: border-box;
+    border-radius: 4px;
+}
+
+/* ========== KaTeX 公式 ========== */
+
+.markdown-body .katex-display {
+    margin: 1em 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 0;
+}
+
+/* ========== Mermaid 图表 ========== */
+
+.markdown-body .mermaid {
+    text-align: center;
+    margin: 16px 0;
+}
+
+.markdown-body .mermaid svg {
+    max-width: 100%;
+}
+
+.mermaid-error {
+    padding: 12px 16px;
+    background-color: #fff3f3;
+    border: 1px solid #ffcdd2;
+    border-radius: 4px;
+    color: #c62828;
+    font-size: 14px;
+    text-align: left;
+}
+
+.dark-theme .mermaid-error {
+    background-color: #3d1f1f;
+    border-color: #5c2b2b;
+    color: #ef9a9a;
+}
+
+/* ========== 错误与占位 ========== */
+
+.render-error {
+    padding: 16px;
+    background-color: #fff3f3;
+    border: 1px solid #ffcdd2;
+    border-radius: 6px;
+    color: #c62828;
+}
+
+.placeholder-text {
+    color: var(--blockquote-color);
+    text-align: center;
+    margin-top: 100px;
+    font-size: 18px;
+}
+
+/* ========== 滚动条美化 ========== */
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-color, #c1c1c1);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-hover, #a8a8a8);
+}
+
+/* ========== 打印样式 ========== */
+
+@media print {
+    body { background: white; }
+    #content { max-width: 100%; padding: 0; }
+    .markdown-body pre { white-space: pre-wrap; }
+}

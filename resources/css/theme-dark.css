@@ -1,0 +1,25 @@
+/**
+ * theme-dark.css — 暗色主题
+ */
+
+:root {
+    --bg-color: #1e1e1e;
+    --text-color: #d4d4d4;
+    --heading-color: #e6e6e6;
+    --link-color: #58a6ff;
+    --code-bg: #2d2d2d;
+    --border-color: #404040;
+    --blockquote-color: #8b949e;
+    --blockquote-border: #404040;
+    --blockquote-bg: #262626;
+    --table-border: #404040;
+    --table-stripe: #2a2a2a;
+    --table-header-bg: #333333;
+    --scrollbar-color: #555555;
+    --scrollbar-hover: #666666;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}

@@ -1,0 +1,25 @@
+/**
+ * theme-light.css — 亮色主题（默认）
+ */
+
+:root {
+    --bg-color: #ffffff;
+    --text-color: #24292e;
+    --heading-color: #1b1f23;
+    --link-color: #0366d6;
+    --code-bg: #f6f8fa;
+    --border-color: #e1e4e8;
+    --blockquote-color: #6a737d;
+    --blockquote-border: #dfe2e5;
+    --blockquote-bg: #fafbfc;
+    --table-border: #dfe2e5;
+    --table-stripe: #f6f8fa;
+    --table-header-bg: #f0f2f5;
+    --scrollbar-color: #c1c1c1;
+    --scrollbar-hover: #a8a8a8;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}

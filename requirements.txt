@@ -1,0 +1,6 @@
+# MD Reader 依赖
+# Python 3.8.x（最后支持 Windows 7 的版本）
+# 安装: pip install -r requirements.txt
+
+PyQt5>=5.15,<6.0
+PyQtWebEngine>=5.15,<6.0

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- KaTeX 样式 + 字体 -->
+    <link rel="stylesheet" href="../css/katex.min.css">
+    <!-- 代码高亮主题（亮/暗各一份，通过 disabled 切换） -->
+    <link rel="stylesheet" href="../css/github.min.css" id="hljs-light">
+    <link rel="stylesheet" href="../css/github-dark.min.css" id="hljs-dark" disabled>
+    <!-- Markdown 排版 + 应用主题 -->
+    <link rel="stylesheet" href="../css/markdown.css">
+    <link rel="stylesheet" href="../css/theme-light.css" id="theme-stylesheet">
+</head>
+<body>
+    <div id="content" class="markdown-body">
+        <p class="placeholder-text">打开一个 Markdown 文件开始预览</p>
+    </div>
+
+    <!-- QWebChannel（Qt 内置，用于 Python ↔ JS 通信） -->
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <!-- 第三方库 -->
+    <script src="../js/marked.min.js"></script>
+    <script src="../js/katex.min.js"></script>
+    <script src="../js/auto-render.min.js"></script>
+    <script src="../js/highlight.min.js"></script>
+    <script src="../js/mermaid.min.js"></script>
+    <!-- 自定义渲染逻辑 -->
+    <script src="../js/render.js"></script>
+</body>
+</html>
