@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 
-from PyQt5.QtCore import QSize, QTimer, pyqtSignal
+from PyQt5.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QButtonGroup,
@@ -23,11 +23,15 @@ from PyQt5.QtWidgets import (
 
 from .editor import MarkdownEditor
 from .preview import PreviewPane
+from .toc_widget import extract_headings
 from .vditor_pane import VditorPane
 
 
 class EditorPreviewPair(QWidget):
     """单个标签页：编辑器 + 预览的分割视图"""
+
+    # 预览不可见时（即时渲染/单栏源码），TOC 需从源码提取更新
+    headings_changed = pyqtSignal(list)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -35,6 +39,9 @@ class EditorPreviewPair(QWidget):
         self.is_dirty: bool = False
         self.view_mode: str = "reading"  # reading / edit / instant
         self.dual_pane: bool = True  # 源码编辑模式下是否显示预览
+        # 视图模式是否已真正应用过（防止 set_view_mode 的相同模式短路
+        # 导致新标签页保持"编辑器+预览都可见"的初始状态）
+        self._mode_applied: bool = False
         self._vditor_pane: VditorPane | None = None  # 懒加载
 
         # 分割器：左编辑 右预览
@@ -151,8 +158,10 @@ class EditorPreviewPair(QWidget):
         self._debounce.start(300)  # 300ms 防抖
 
     def _do_render(self) -> None:
-        # 预览不可见时跳过渲染（即时渲染模式 / 单栏源码模式）
+        # 预览不可见时（即时渲染 / 单栏源码）跳过渲染，
+        # 但 TOC 仍需从源码提取更新
         if not self.is_preview_visible():
+            self.headings_changed.emit(extract_headings(self.editor.get_text()))
             return
         text = self.editor.get_text()
         self.preview.render_markdown(text)
@@ -190,7 +199,11 @@ class EditorPreviewPair(QWidget):
         # 浮动单/双栏控件可见性必须始终与模式同步（即便下方提前返回）
         self._pane_toggle.setVisible(mode == "edit")
 
-        if mode == self.view_mode and dual_pane == self.dual_pane:
+        if (
+            self._mode_applied
+            and mode == self.view_mode
+            and dual_pane == self.dual_pane
+        ):
             return
 
         # 离开即时渲染模式：需先异步取回 Vditor 内容，再切换
@@ -218,6 +231,7 @@ class EditorPreviewPair(QWidget):
         """实际应用模式：控制三个面板的显隐 + 浮动控件"""
         self.view_mode = mode
         self.dual_pane = dual_pane
+        self._mode_applied = True
 
         # 浮动单/双栏控件仅在源码编辑模式显示
         show_pane = mode == "edit"
@@ -326,12 +340,16 @@ class TabManager(QTabWidget):
     current_pair_changed = pyqtSignal(object)
     # 标签页标题需要更新
     title_changed = pyqtSignal(int, str)
+    # 最后一个标签页被关闭时发出（用于保证始终保留一个标签页）
+    all_tabs_closed = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setTabsClosable(True)
         self.setMovable(True)
         self.setDocumentMode(True)
+        # 超长标签右侧省略（Qt 默认中间省略，不符合阅读习惯）
+        self.setElideMode(Qt.ElideRight)
 
         self.tabCloseRequested.connect(self.close_tab)
         self.currentChanged.connect(self._on_current_changed)
@@ -355,6 +373,8 @@ class TabManager(QTabWidget):
 
         title = self._make_title(file_path)
         idx = self.addTab(pair, title)
+        # 悬浮提示完整路径（标签超长被省略时可查看）
+        self.setTabToolTip(idx, file_path or "未保存的文档")
         self.setCurrentIndex(idx)
 
         # 初始渲染
@@ -431,6 +451,12 @@ class TabManager(QTabWidget):
                 self.removeTab(i)
                 break
         pair.deleteLater()
+        if self.count() == 0:
+            self.all_tabs_closed.emit()
+
+    def discard_pair(self, pair: EditorPreviewPair) -> None:
+        """无提示移除一个标签页（用于清理未动过的空白占位页）"""
+        self._remove_pair(pair)
 
     def current_pair(self) -> EditorPreviewPair | None:
         """获取当前标签页的 EditorPreviewPair"""
@@ -447,6 +473,8 @@ class TabManager(QTabWidget):
             if pair.is_dirty:
                 title = "● " + title
             self.setTabText(index, title)
+            # 另存为后路径可能变化，同步悬浮提示
+            self.setTabToolTip(index, pair.file_path or "未保存的文档")
 
     def _on_current_changed(self, index: int) -> None:
         pair = self.current_pair()

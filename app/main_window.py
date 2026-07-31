@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QStatusBar,
     QToolBar,
     QToolButton,
@@ -33,7 +34,7 @@ from .file_tree import FileTreeWidget
 from .icons import build_icons
 from .tab_manager import EditorPreviewPair, TabManager
 from .theme_manager import ThemeManager
-from .toc_widget import TocWidget
+from .toc_widget import TocWidget, extract_headings
 
 # 支持的文件扩展名
 _MD_EXTENSIONS = {".md", ".markdown", ".mdown", ".txt"}
@@ -51,6 +52,9 @@ class MainWindow(QMainWindow):
         self._config = Config()
         self._theme_mgr = ThemeManager()
 
+        # TOC 信号当前绑定的标签页（_on_pair_changed 负责换绑）
+        self._toc_bound_pair = None
+
         # 视图模式状态（阅读/编辑 + 双栏）
         self._view_mode: str = self._config.get("view_mode", "reading")
         self._dual_pane: bool = self._config.get("dual_pane", True)
@@ -63,11 +67,15 @@ class MainWindow(QMainWindow):
         self._setup_statusbar()
         self._connect_signals()
 
-        # 应用保存的主题
+        # 应用浅色主题（深色模式已移除）
         app = QApplication.instance()
         if app:
-            self._theme_mgr.apply_theme(self._theme_mgr.current_theme, app)
+            self._theme_mgr.apply_theme(app)
             self._apply_editor_theme()
+
+        # 始终保留一个标签页：启动即打开空白的「未命名」页，
+        # 用户直接编辑后保存时会走"另存为"流程创建新文件
+        self._new_tab()
 
     # ──────────────────────────────────────────
     #  窗口基础设置
@@ -95,22 +103,28 @@ class MainWindow(QMainWindow):
         self._tabs = TabManager()
         self.setCentralWidget(self._tabs)
 
-        # 左侧停靠：文件树
-        self._file_tree = FileTreeWidget()
-        self._file_dock = QDockWidget("文件浏览器", self)
-        self._file_dock.setWidget(self._file_tree)
-        self._file_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self._file_dock)
-
-        # 右侧停靠：TOC 导航
+        # 左侧停靠：TOC 导航（布局固定：不可拖出为浮动窗口，仅可关闭）
         self._toc = TocWidget()
+        self._toc.setMinimumWidth(160)
+        self._toc.setMaximumWidth(400)
         self._toc_dock = QDockWidget("目录导航", self)
         self._toc_dock.setWidget(self._toc)
-        self._toc_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        self.addDockWidget(Qt.RightDockWidgetArea, self._toc_dock)
+        self._toc_dock.setAllowedAreas(Qt.LeftDockWidgetArea)
+        self._toc_dock.setFeatures(QDockWidget.DockWidgetClosable)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self._toc_dock)
 
-        # 恢复侧边栏可见性
-        self._file_dock.setVisible(self._config.get("show_file_tree", True))
+        # 右侧停靠：文件树（布局固定：不可拖出为浮动窗口，仅可关闭）
+        self._file_tree = FileTreeWidget()
+        self._file_tree.setMinimumWidth(180)
+        self._file_tree.setMaximumWidth(480)
+        self._file_dock = QDockWidget("文件浏览器", self)
+        self._file_dock.setWidget(self._file_tree)
+        self._file_dock.setAllowedAreas(Qt.RightDockWidgetArea)
+        self._file_dock.setFeatures(QDockWidget.DockWidgetClosable)
+        self.addDockWidget(Qt.RightDockWidgetArea, self._file_dock)
+
+        # 恢复侧边栏可见性（首次启动：左栏显示，右栏隐藏）
+        self._file_dock.setVisible(self._config.get("show_file_tree", False))
         self._toc_dock.setVisible(self._config.get("show_toc", True))
 
         # 恢复上次打开的文件夹
@@ -228,7 +242,7 @@ class MainWindow(QMainWindow):
 
         self._act_toggle_file_tree = QAction("文件浏览器", self)
         self._act_toggle_file_tree.setCheckable(True)
-        self._act_toggle_file_tree.setChecked(self._config.get("show_file_tree", True))
+        self._act_toggle_file_tree.setChecked(self._config.get("show_file_tree", False))
         self._act_toggle_file_tree.setShortcut("Ctrl+Shift+E")
         self._act_toggle_file_tree.toggled.connect(self._toggle_file_tree)
         view_menu.addAction(self._act_toggle_file_tree)
@@ -239,13 +253,6 @@ class MainWindow(QMainWindow):
         self._act_toggle_toc.setShortcut("Ctrl+Shift+T")
         self._act_toggle_toc.toggled.connect(self._toggle_toc)
         view_menu.addAction(self._act_toggle_toc)
-
-        view_menu.addSeparator()
-
-        self._act_toggle_theme = QAction("切换深色/浅色主题", self)
-        self._act_toggle_theme.setShortcut("Ctrl+Shift+D")
-        self._act_toggle_theme.triggered.connect(self._toggle_theme)
-        view_menu.addAction(self._act_toggle_theme)
 
         view_menu.addSeparator()
 
@@ -272,8 +279,23 @@ class MainWindow(QMainWindow):
         toolbar.setIconSize(QSize(18, 18))
         self.addToolBar(toolbar)
 
-        # 工具栏仅保留模式切换分段控件（其余功能在菜单栏）
+        # 左侧：常用操作（打开/保存/导出），图标经 defaultAction 共享
+        for act in (
+            self._act_open,
+            self._act_save,
+            self._act_export_pdf,
+        ):
+            toolbar.addAction(act)
+
+        # 弹簧：把模式胶囊推到右侧
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        toolbar.addWidget(spacer)
+
+        # 右侧：模式切换分段控件 + 侧栏显隐开关（checkable，按下=显示）
         toolbar.addWidget(self._build_mode_segment())
+        toolbar.addAction(self._act_toggle_toc)
+        toolbar.addAction(self._act_toggle_file_tree)
 
     def _init_icons(self) -> None:
         """生成图标并绑定到菜单 action（工具栏按钮经 defaultAction 共享）"""
@@ -283,12 +305,22 @@ class MainWindow(QMainWindow):
             self._act_mode_instant: "instant",
             self._act_mode_source: "source",
             self._act_dual_pane: "pane_dual",
+            self._act_open: "open",
+            self._act_save: "save",
+            self._act_export_pdf: "export",
+            self._act_toggle_toc: "sidebar_left",
+            self._act_toggle_file_tree: "sidebar_right",
         }
         # 纯图标按钮的悬浮提示
         self._act_mode_reading.setToolTip("阅读模式 (Ctrl+Shift+R)")
         self._act_mode_instant.setToolTip("即时渲染 (Ctrl+Shift+I)")
         self._act_mode_source.setToolTip("源码编辑 (Ctrl+Shift+M)")
         self._act_dual_pane.setToolTip("双栏预览 (Ctrl+Shift+P)")
+        self._act_open.setToolTip("打开文件 (Ctrl+O)")
+        self._act_save.setToolTip("保存 (Ctrl+S)")
+        self._act_export_pdf.setToolTip("导出为 PDF")
+        self._act_toggle_toc.setToolTip("显示/隐藏目录导航 (Ctrl+Shift+T)")
+        self._act_toggle_file_tree.setToolTip("显示/隐藏文件浏览器 (Ctrl+Shift+E)")
         self._apply_action_icons()
 
     def _apply_action_icons(self) -> None:
@@ -359,6 +391,13 @@ class MainWindow(QMainWindow):
         # 标签页切换 → 更新 TOC / 状态栏
         self._tabs.current_pair_changed.connect(self._on_pair_changed)
 
+        # 最后一个标签页关闭后 → 自动补一个空白占位页
+        self._tabs.all_tabs_closed.connect(self._new_tab)
+
+        # dock 被标题栏 X 关闭时 → 同步菜单/工具栏勾选状态
+        self._toc_dock.visibilityChanged.connect(self._act_toggle_toc.setChecked)
+        self._file_dock.visibilityChanged.connect(self._act_toggle_file_tree.setChecked)
+
         # TOC 点击 → 预览滚动 + 编辑器跳转
         self._toc.heading_clicked.connect(self._on_heading_clicked)
 
@@ -383,8 +422,8 @@ class MainWindow(QMainWindow):
         # 新建标签页
         pair = self._tabs.add_tab(file_path=abs_path, content=content)
 
-        # 连接 TOC 信号
-        pair.preview.toc_updated.connect(self._toc.update_toc)
+        # 清理未动过的空白占位页（启动时自动创建的"未命名"）
+        self._drop_placeholder_tab(except_pair=pair)
 
         # 应用当前视图模式（默认阅读模式）
         self._apply_view_mode_to_pair(pair)
@@ -457,8 +496,28 @@ class MainWindow(QMainWindow):
 
     def _new_tab(self) -> None:
         pair = self._tabs.add_tab()
-        pair.preview.toc_updated.connect(self._toc.update_toc)
         self._apply_view_mode_to_pair(pair)
+
+    @staticmethod
+    def _is_placeholder(pair) -> bool:
+        """未命名、未修改且内容为空的占位标签页"""
+        return (
+            pair.file_path is None
+            and not pair.is_dirty
+            and not pair.editor.get_text().strip()
+        )
+
+    def _drop_placeholder_tab(self, except_pair) -> None:
+        """清理除 except_pair 外的第一个空白占位页"""
+        for i in range(self._tabs.count()):
+            widget = self._tabs.widget(i)
+            if (
+                isinstance(widget, EditorPreviewPair)
+                and widget is not except_pair
+                and self._is_placeholder(widget)
+            ):
+                self._tabs.discard_pair(widget)
+                return
 
     def _close_current_tab(self) -> None:
         idx = self._tabs.currentIndex()
@@ -537,19 +596,6 @@ class MainWindow(QMainWindow):
         self._toc_dock.setVisible(visible)
         self._config.set("show_toc", visible)
 
-    def _toggle_theme(self) -> None:
-        app = QApplication.instance()
-        if app:
-            new_theme = self._theme_mgr.toggle(app)
-            self._apply_editor_theme()
-            self._refresh_icons()  # 图标颜色随主题重建
-            # 通知所有预览面板切换主题
-            for i in range(self._tabs.count()):
-                pair = self._tabs.widget(i)
-                if isinstance(pair, EditorPreviewPair):
-                    pair.preview.set_theme(new_theme)
-            self._status_file.setText(f"主题: {new_theme}")
-
     def _apply_editor_theme(self) -> None:
         """将主题样式应用到所有编辑器（QSS + 绘制配色 + Vditor）"""
         style = self._theme_mgr.get_editor_style()
@@ -576,18 +622,31 @@ class MainWindow(QMainWindow):
 
     def _on_pair_changed(self, pair) -> None:
         """标签页切换时更新关联组件"""
+        # TOC 信号只跟随当前标签页：先解绑旧标签页，避免后台
+        # 标签页重渲染时其 TOC 抢先刷入导航栏（视图切换闪烁的根因）
+        old = self._toc_bound_pair
+        if old is not None and old is not pair:
+            try:
+                old.preview.toc_updated.disconnect(self._toc.update_toc)
+                old.headings_changed.disconnect(self._toc.update_toc)
+            except (TypeError, RuntimeError):
+                pass
+        self._toc_bound_pair = pair
+
         if pair is None:
             self._toc.clear_toc()
             self._status_file.setText("就绪")
             self.setWindowTitle("MD Reader — Markdown 阅读器")
             return
 
-        # 重新连接 TOC（断开旧的，连接新的）
+        # 绑定当前标签页的 TOC 信号（JS 渲染产物 + 源码提取兜底）
         try:
             pair.preview.toc_updated.disconnect(self._toc.update_toc)
-        except TypeError:
+            pair.headings_changed.disconnect(self._toc.update_toc)
+        except (TypeError, RuntimeError):
             pass
         pair.preview.toc_updated.connect(self._toc.update_toc)
+        pair.headings_changed.connect(self._toc.update_toc)
 
         # 触发一次渲染以刷新 TOC
         pair.render_now()
@@ -610,32 +669,25 @@ class MainWindow(QMainWindow):
         if not pair:
             return
 
+        # 在源码中定位标题（统一走 extract_headings，id 规则与 JS 端一致）
+        entry = None
+        for e in extract_headings(pair.editor.get_text()):
+            if e["id"] == heading_id:
+                entry = e
+                break
+
+        # 即时渲染模式：滚动 Vditor 到标题
+        if pair.view_mode == "instant":
+            if entry and pair.vditor_pane is not None:
+                pair.vditor_pane.scroll_to_heading(entry["text"])
+            return
+
         # 预览区滚动到标题
         pair.preview.scroll_to_heading(heading_id)
 
-        # 编辑器跳转到对应行（通过搜索标题文本）
-        # 简单实现：搜索以 # 开头的匹配行
-        text = pair.editor.get_text()
-        lines = text.split("\n")
-        target_prefix = "#" * level + " "
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith(target_prefix):
-                # 简单匹配：生成 id 比较
-                heading_text = stripped[len(target_prefix) :].strip()
-                generated_id = self._make_heading_id(heading_text)
-                if generated_id == heading_id:
-                    pair.editor.goto_line(i + 1)
-                    break
-
-    @staticmethod
-    def _make_heading_id(text: str) -> str:
-        """模拟 JS 端的标题 id 生成逻辑"""
-        import re
-
-        hid = re.sub(r"[^\w\u4e00-\u9fff]+", "-", text.lower())
-        hid = hid.strip("-")
-        return hid or "heading"
+        # 编辑器跳转到对应行
+        if entry:
+            pair.editor.goto_line(entry["line"])
 
     # ──────────────────────────────────────────
     #  拖放支持

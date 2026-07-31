@@ -1,19 +1,30 @@
 """
-theme_manager.py — 主题管理（「墨与纸」设计系统）
+theme_manager.py — 主题管理（「墨与纸 · 昼」设计系统，固定浅色）
 
 以调色板 (palette) 为单一数据源，统一驱动：
 - 主窗口 QSS 样式表（菜单栏/工具栏/标签页/停靠栏/状态栏）
 - 编辑器配色（背景/行号栏/当前行/选区/光标）
-- 预览区 CSS 主题切换（JS 端）
+- 预览区 CSS 主题（固定 theme-light.css）
 
-调色板与 resources/css/theme-*.css 保持同一设计语言。
+调色板与 resources/css/theme-light.css 保持同一设计语言。
+（2026-07-31 起移除深色模式，应用固定为浅色主题）
 """
 
 from __future__ import annotations
 
+import os
+
 from PyQt5.QtWidgets import QApplication
 
-from .config import Config
+# 资源目录（相对于项目根目录）
+_RESOURCES_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources"
+)
+# QSS url() 需要正斜杠路径
+_TAB_CLOSE_SVG = os.path.join(_RESOURCES_DIR, "icons", "tab-close.svg").replace("\\", "/")
+_TAB_CLOSE_HOVER_SVG = os.path.join(
+    _RESOURCES_DIR, "icons", "tab-close-hover.svg"
+).replace("\\", "/")
 
 # ══════════════════════════════════════════════
 #  调色板定义（与 CSS 主题同源）
@@ -35,6 +46,8 @@ LIGHT_PALETTE = {
     "accent_strong": "#0a5546",
     "accent_soft": "#dcebe5",
     "amber": "#b8862b",
+    # 语义：标签关闭按钮悬停（朱砂）
+    "vermilion": "#b8544f",
     # 线条
     "border": "#d8d2c2",
     "border_strong": "#c9c2ae",
@@ -49,52 +62,10 @@ LIGHT_PALETTE = {
     "gutter_ink": "#b3ab96",
     "current_line": "#f4f1e6",
     "caret": "#0e6b5a",
-    # 状态栏
-    "status_bg": "#0e6b5a",
-    "status_ink": "#eaf4f0",
     # 滚动条
     "scrollbar": "#cbc4b2",
     "scrollbar_hov": "#b3ab96",
 }
-
-DARK_PALETTE = {
-    # 应用外壳
-    "chrome": "#14161a",
-    "chrome_alt": "#101216",
-    "surface": "#1e2126",
-    "inset": "#171a1e",
-    # 文本
-    "ink": "#d5d1c6",
-    "ink_strong": "#ece8dd",
-    "ink_muted": "#8b867a",
-    "ink_faint": "#5f5b51",
-    # 主色
-    "accent": "#4db6a2",
-    "accent_strong": "#6cc9b7",
-    "accent_soft": "#1d3833",
-    "amber": "#d9a94f",
-    # 线条
-    "border": "#2c3037",
-    "border_strong": "#3a3f47",
-    "hairline": "#262a30",
-    # 交互
-    "hover": "#262b32",
-    "pressed": "#2e343c",
-    "selection": "#26463f",
-    # 编辑器
-    "editor_bg": "#1e2126",
-    "gutter_bg": "#191c21",
-    "gutter_ink": "#57534a",
-    "current_line": "#252932",
-    "caret": "#4db6a2",
-    # 状态栏
-    "status_bg": "#0f5a4c",
-    "status_ink": "#dcefe9",
-    # 滚动条
-    "scrollbar": "#3d434c",
-    "scrollbar_hov": "#4d545f",
-}
-
 
 def _build_qss(p: dict) -> str:
     """由调色板生成整窗 QSS 样式表"""
@@ -113,7 +84,7 @@ QWidget {{
 QMenuBar {{
     background-color: {p["chrome"]};
     color: {p["ink_muted"]};
-    border-bottom: 1px solid {p["hairline"]};
+    border-bottom: 1px solid {p["border"]};
     padding: 2px;
     font-size: 13px;
 }}
@@ -163,15 +134,15 @@ QMenu::indicator:checked {{
 QToolBar {{
     background-color: {p["chrome"]};
     border: none;
-    border-bottom: 1px solid {p["hairline"]};
+    border-bottom: 1px solid {p["border"]};
     spacing: 3px;
-    padding: 4px 6px;
+    padding: 2px 10px;
 }}
 QToolButton {{
     background: transparent;
     border: none;
     border-radius: 6px;
-    padding: 5px 9px;
+    padding: 3px 7px;
     color: {p["ink_muted"]};
     font-size: 13px;
 }}
@@ -186,6 +157,7 @@ QToolButton:pressed {{
 /* ═══ 标签页（现代下划线风格） ═══ */
 QTabWidget::pane {{
     border: none;
+    border-top: 1px solid {p["border"]};
     background-color: {p["chrome_alt"]};
 }}
 QTabBar {{
@@ -197,6 +169,7 @@ QTabBar::tab {{
     color: {p["ink_faint"]};
     padding: 9px 20px 8px;
     border: none;
+    border-right: 1px solid {p["border"]};
     border-bottom: 2px solid transparent;
     font-size: 13px;
     min-width: 90px;
@@ -208,15 +181,18 @@ QTabBar::tab:hover {{
 QTabBar::tab:selected {{
     color: {p["ink_strong"]};
     border-bottom: 2px solid {p["accent"]};
-    background-color: {p["chrome_alt"]};
+    background: transparent;
     font-weight: 600;
 }}
 QTabBar::close-button {{
+    image: url("{_TAB_CLOSE_SVG}");
     border-radius: 4px;
     padding: 2px;
+    margin: 1px;
 }}
 QTabBar::close-button:hover {{
-    background-color: {p["pressed"]};
+    image: url("{_TAB_CLOSE_HOVER_SVG}");
+    background-color: {p["vermilion"]};
 }}
 
 /* ═══ 停靠栏（文件树 / TOC） ═══ */
@@ -231,7 +207,7 @@ QDockWidget::title {{
     color: {p["ink_muted"]};
     text-align: left;
     padding: 8px 12px;
-    border-bottom: 1px solid {p["hairline"]};
+    border-bottom: 1px solid {p["border"]};
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -257,54 +233,70 @@ QTreeView, QTreeWidget {{
     font-size: 13px;
     padding: 4px;
 }}
-QTreeView::item {{
+QTreeView::item, QTreeWidget::item {{
     padding: 4px 6px;
     border-radius: 5px;
     color: {p["ink"]};
 }}
-QTreeView::item:hover {{
+QTreeView::item:hover, QTreeWidget::item:hover {{
     background-color: {p["hover"]};
 }}
-QTreeView::item:selected {{
+QTreeView::item:selected, QTreeWidget::item:selected {{
     background-color: {p["accent_soft"]};
     color: {p["accent_strong"]};
+    border-left: 2px solid {p["accent"]};
+    border-radius: 0 5px 5px 0;
+    padding-left: 4px;
 }}
 QTreeView::branch:has-children:!has-siblings:closed,
 QTreeView::branch:closed:has-children:has-siblings {{
     image: none;
 }}
 
-/* ═══ 分割条 ═══ */
+/* ═══ 分割条（编辑器/预览之间，与主窗口分隔条同规格） ═══ */
 QSplitter::handle {{
-    background-color: {p["hairline"]};
+    background-color: {p["border"]};
 }}
-QSplitter::handle:horizontal {{ width: 1px; }}
-QSplitter::handle:vertical {{ height: 1px; }}
+QSplitter::handle:horizontal {{ width: 4px; }}
+QSplitter::handle:vertical {{ height: 4px; }}
 QSplitter::handle:hover {{
+    background-color: {p["accent"]};
+}}
+
+/* ═══ 主窗口分隔条（停靠栏与中央区之间，可拖拽调整宽度） ═══ */
+QMainWindow::separator {{
+    background-color: {p["border"]};
+    width: 4px;
+    height: 4px;
+}}
+QMainWindow::separator:hover {{
     background-color: {p["accent"]};
 }}
 
 /* ═══ 状态栏 ═══ */
 QStatusBar {{
-    background-color: {p["status_bg"]};
-    color: {p["status_ink"]};
+    background-color: {p["chrome"]};
+    color: {p["ink_muted"]};
     font-size: 12px;
-    border-top: none;
+    border-top: 1px solid {p["border"]};
+}}
+QStatusBar::item {{
+    border: none;
 }}
 QStatusBar QLabel {{
-    color: {p["status_ink"]};
+    color: {p["ink_muted"]};
     padding: 0 10px;
 }}
 
-/* ═══ 滚动条 ═══ */
+/* ═══ 滚动条（滑槽 + 把手，与扁平分隔条形成区分） ═══ */
 QScrollBar:vertical {{
-    background: transparent;
-    width: 11px;
+    background: {p["inset"]};
+    width: 10px;
     margin: 0;
 }}
 QScrollBar::handle:vertical {{
-    background: {p["scrollbar"]};
-    border-radius: 5px;
+    background: {p["border_strong"]};
+    border-radius: 4px;
     min-height: 24px;
     margin: 2px;
 }}
@@ -315,12 +307,12 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0;
 }}
 QScrollBar:horizontal {{
-    background: transparent;
-    height: 11px;
+    background: {p["inset"]};
+    height: 10px;
 }}
 QScrollBar::handle:horizontal {{
-    background: {p["scrollbar"]};
-    border-radius: 5px;
+    background: {p["border_strong"]};
+    border-radius: 4px;
     min-width: 24px;
     margin: 2px;
 }}
@@ -363,24 +355,18 @@ QPushButton:default:hover {{
     background-color: {p["accent_strong"]};
 }}
 
-/* ═══ 工具栏 ═══ */
-QToolBar {{
-    padding: 7px 14px;
-    spacing: 10px;
-}}
-
 /* ═══ 模式分段控件（胶囊槽 + 选中滑块） ═══ */
 QWidget#mode_seg {{
     background-color: {p["inset"]};
-    border: 1px solid {p["border"]};
+    border: none;
     border-radius: 9px;
 }}
 QWidget#mode_seg QToolButton {{
     background: transparent;
     border: none;
     border-radius: 7px;
-    padding: 5px 13px;
-    min-height: 22px;
+    padding: 2px 10px;
+    min-height: 18px;
     color: {p["ink_muted"]};
     font-size: 12.5px;
     font-weight: 600;
@@ -439,27 +425,20 @@ QPlainTextEdit {{
 
 
 class ThemeManager:
-    """主题管理器：以调色板驱动全应用样式"""
-
-    def __init__(self) -> None:
-        self._config = Config()
-        self._current_theme: str = self._config.get("theme", "light")
+    """主题管理器：以调色板驱动全应用样式（固定浅色「墨与纸 · 昼」）"""
 
     @property
     def current_theme(self) -> str:
-        return self._current_theme
+        return "light"
 
     @property
     def palette(self) -> dict:
         """当前主题的调色板"""
-        return DARK_PALETTE if self._current_theme == "dark" else LIGHT_PALETTE
+        return LIGHT_PALETTE
 
-    def apply_theme(self, theme_name: str, app: QApplication) -> None:
+    def apply_theme(self, app: QApplication) -> None:
         """应用主题到整个应用"""
-        self._current_theme = theme_name
-        self._config.set("theme", theme_name)
-        p = self.palette
-        app.setStyleSheet(_build_qss(p))
+        app.setStyleSheet(_build_qss(self.palette))
 
     def get_editor_style(self) -> str:
         """获取编辑器 QSS"""
@@ -475,9 +454,3 @@ class ThemeManager:
             "caret": p["caret"],
             "border": p["hairline"],
         }
-
-    def toggle(self, app: QApplication) -> str:
-        """切换主题，返回新主题名"""
-        new_theme = "dark" if self._current_theme == "light" else "light"
-        self.apply_theme(new_theme, app)
-        return new_theme

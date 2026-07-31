@@ -101,12 +101,98 @@ def _draw_pane_dual(p: QPainter, color: str) -> None:
     p.drawLine(QPointF(12, 5), QPointF(12, 19))
 
 
+def _draw_open(p: QPainter, color: str) -> None:
+    """文件夹：打开文件"""
+    p.setPen(QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    p.setBrush(Qt.NoBrush)
+    folder = QPainterPath()
+    folder.moveTo(3, 19)
+    folder.lineTo(3, 6.5)
+    folder.quadTo(3, 5, 4.5, 5)
+    folder.lineTo(9, 5)
+    folder.lineTo(11.5, 8)
+    folder.lineTo(19.5, 8)
+    folder.quadTo(21, 8, 21, 9.5)
+    folder.lineTo(21, 19)
+    folder.closeSubpath()
+    p.drawPath(folder)
+
+
+def _draw_save(p: QPainter, color: str) -> None:
+    """软盘：保存"""
+    p.setPen(QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    p.setBrush(Qt.NoBrush)
+    body = QPainterPath()
+    body.moveTo(5, 3.5)
+    body.lineTo(15.5, 3.5)
+    body.lineTo(20.5, 8.5)
+    body.lineTo(20.5, 20.5)
+    body.lineTo(5, 20.5)
+    body.closeSubpath()
+    p.drawPath(body)
+    # 上部滑盖 + 下部存储槽
+    p.drawRect(QRectF(8, 3.5, 8, 5.5))
+    p.drawRect(QRectF(8, 13.5, 8, 7))
+
+
+def _draw_export(p: QPainter, color: str) -> None:
+    """向上导出箭头：导出"""
+    pen = QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    # 托盘
+    tray = QPainterPath()
+    tray.moveTo(4, 14)
+    tray.lineTo(4, 19)
+    tray.quadTo(4, 20.5, 5.5, 20.5)
+    tray.lineTo(18.5, 20.5)
+    tray.quadTo(20, 20.5, 20, 19)
+    tray.lineTo(20, 14)
+    p.drawPath(tray)
+    # 向上箭头
+    p.drawLine(QPointF(12, 15.5), QPointF(12, 4.5))
+    head = QPainterPath()
+    head.moveTo(8, 8.5)
+    head.lineTo(12, 4.5)
+    head.lineTo(16, 8.5)
+    p.drawPath(head)
+
+
+def _draw_sidebar(p: QPainter, color: str, left: bool) -> None:
+    """侧栏面板：外框 + 一侧填充（left=True 填充左侧）"""
+    p.setPen(QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    p.setBrush(Qt.NoBrush)
+    p.drawRoundedRect(QRectF(3.5, 5, 17, 14), 2, 2)
+    line_x = 9.5 if left else 14.5
+    p.drawLine(QPointF(line_x, 5), QPointF(line_x, 19))
+    # 侧栏区域填充（内缩避免与外框描边重叠）
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(QColor(color)))
+    fill_x = 4.7 if left else 15.0
+    p.drawRect(QRectF(fill_x, 6.5, 4.3, 11))
+
+
+def _draw_sidebar_left(p: QPainter, color: str) -> None:
+    """左侧栏显隐"""
+    _draw_sidebar(p, color, left=True)
+
+
+def _draw_sidebar_right(p: QPainter, color: str) -> None:
+    """右侧栏显隐"""
+    _draw_sidebar(p, color, left=False)
+
+
 _DRAW = {
     "reading": _draw_reading,
     "instant": _draw_instant,
     "source": _draw_source,
     "pane_single": _draw_pane_single,
     "pane_dual": _draw_pane_dual,
+    "open": _draw_open,
+    "save": _draw_save,
+    "export": _draw_export,
+    "sidebar_left": _draw_sidebar_left,
+    "sidebar_right": _draw_sidebar_right,
 }
 
 NAMES = list(_DRAW)
