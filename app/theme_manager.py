@@ -107,7 +107,7 @@ QWidget {{
 QMenuBar {{
     background-color: {p["chrome"]};
     color: {p["ink_muted"]};
-    border-bottom: 1px solid {p["hairline"]};
+    border-bottom: 1px solid {p["border"]};
     padding: 2px;
     font-size: 13px;
 }}
@@ -157,7 +157,7 @@ QMenu::indicator:checked {{
 QToolBar {{
     background-color: {p["chrome"]};
     border: none;
-    border-bottom: 1px solid {p["hairline"]};
+    border-bottom: 1px solid {p["border"]};
     spacing: 4px;
     padding: 5px 10px;
 }}
@@ -180,6 +180,7 @@ QToolButton:pressed {{
 /* ═══ 标签页（现代下划线风格） ═══ */
 QTabWidget::pane {{
     border: none;
+    border-top: 1px solid {p["border"]};
     background-color: {p["chrome_alt"]};
 }}
 QTabBar {{
@@ -191,6 +192,7 @@ QTabBar::tab {{
     color: {p["ink_faint"]};
     padding: 9px 20px 8px;
     border: none;
+    border-right: 1px solid {p["border"]};
     border-bottom: 2px solid transparent;
     font-size: 13px;
     min-width: 90px;
@@ -225,7 +227,7 @@ QDockWidget::title {{
     color: {p["ink_muted"]};
     text-align: left;
     padding: 8px 12px;
-    border-bottom: 1px solid {p["hairline"]};
+    border-bottom: 1px solid {p["border"]};
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -296,7 +298,7 @@ QStatusBar {{
     background-color: {p["chrome"]};
     color: {p["ink_muted"]};
     font-size: 12px;
-    border-top: 1px solid {p["hairline"]};
+    border-top: 1px solid {p["border"]};
 }}
 QStatusBar::item {{
     border: none;
