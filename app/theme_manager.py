@@ -158,14 +158,14 @@ QToolBar {{
     background-color: {p["chrome"]};
     border: none;
     border-bottom: 1px solid {p["border"]};
-    spacing: 4px;
-    padding: 5px 10px;
+    spacing: 3px;
+    padding: 2px 10px;
 }}
 QToolButton {{
     background: transparent;
     border: none;
     border-radius: 6px;
-    padding: 5px 9px;
+    padding: 3px 7px;
     color: {p["ink_muted"]};
     font-size: 13px;
 }}
@@ -385,8 +385,8 @@ QWidget#mode_seg QToolButton {{
     background: transparent;
     border: none;
     border-radius: 7px;
-    padding: 5px 13px;
-    min-height: 22px;
+    padding: 2px 10px;
+    min-height: 18px;
     color: {p["ink_muted"]};
     font-size: 12.5px;
     font-weight: 600;
