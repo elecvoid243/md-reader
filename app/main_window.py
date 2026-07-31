@@ -289,8 +289,10 @@ class MainWindow(QMainWindow):
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         toolbar.addWidget(spacer)
 
-        # 右侧：模式切换分段控件
+        # 右侧：模式切换分段控件 + 侧栏显隐开关（checkable，按下=显示）
         toolbar.addWidget(self._build_mode_segment())
+        toolbar.addAction(self._act_toggle_toc)
+        toolbar.addAction(self._act_toggle_file_tree)
 
     def _init_icons(self) -> None:
         """生成图标并绑定到菜单 action（工具栏按钮经 defaultAction 共享）"""
@@ -303,6 +305,8 @@ class MainWindow(QMainWindow):
             self._act_open: "open",
             self._act_save: "save",
             self._act_export_pdf: "export",
+            self._act_toggle_toc: "sidebar_left",
+            self._act_toggle_file_tree: "sidebar_right",
         }
         # 纯图标按钮的悬浮提示
         self._act_mode_reading.setToolTip("阅读模式 (Ctrl+Shift+R)")
@@ -312,6 +316,8 @@ class MainWindow(QMainWindow):
         self._act_open.setToolTip("打开文件 (Ctrl+O)")
         self._act_save.setToolTip("保存 (Ctrl+S)")
         self._act_export_pdf.setToolTip("导出为 PDF")
+        self._act_toggle_toc.setToolTip("显示/隐藏目录导航 (Ctrl+Shift+T)")
+        self._act_toggle_file_tree.setToolTip("显示/隐藏文件浏览器 (Ctrl+Shift+E)")
         self._apply_action_icons()
 
     def _apply_action_icons(self) -> None:
@@ -384,6 +390,10 @@ class MainWindow(QMainWindow):
 
         # 最后一个标签页关闭后 → 自动补一个空白占位页
         self._tabs.all_tabs_closed.connect(self._new_tab)
+
+        # dock 被标题栏 X 关闭时 → 同步菜单/工具栏勾选状态
+        self._toc_dock.visibilityChanged.connect(self._act_toggle_toc.setChecked)
+        self._file_dock.visibilityChanged.connect(self._act_toggle_file_tree.setChecked)
 
         # TOC 点击 → 预览滚动 + 编辑器跳转
         self._toc.heading_clicked.connect(self._on_heading_clicked)

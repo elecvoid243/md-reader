@@ -8,8 +8,8 @@ ui_smoke.py — 界面冒烟验证（offscreen 无头模式）
 1. MainWindow 可实例化（含工具栏/双 dock/标签管理器）
 2. dock 位置: TOC 在左、文件浏览器在右
 3. 浅色主题可应用（QSS 构建无 KeyError；深色模式已移除）
-4. 全部图标可构建（含新增的 open/save/export）
-5. 工具栏包含 3 个常用 action（且均有图标）
+4. 全部图标可构建（含新增的 open/save/export/sidebar_left/sidebar_right）
+5. 工具栏包含 5 个常用 action（且均有图标）
 6. 启动即有一个空白「未命名」占位标签页
 7. 打开示例文件后占位页被替换，仅余 1 个文件标签页
 8. 关闭最后一个标签页后自动补一个空白占位页
@@ -46,6 +46,8 @@ EXPECTED_ICONS = {
     "open",
     "save",
     "export",
+    "sidebar_left",
+    "sidebar_right",
 }
 
 
@@ -80,13 +82,19 @@ def main() -> int:
     assert set(icons) >= EXPECTED_ICONS
     assert not icons["open"].isNull()
 
-    # 4. 工具栏包含 3 个常用 action（且均有图标）
+    # 4. 工具栏包含 5 个常用 action（且均有图标）
     from PyQt5.QtWidgets import QToolBar
 
     bars = window.findChildren(QToolBar)
     assert bars, "应存在主工具栏"
     bar_actions = bars[0].actions()
-    for attr in ("_act_open", "_act_save", "_act_export_pdf"):
+    for attr in (
+        "_act_open",
+        "_act_save",
+        "_act_export_pdf",
+        "_act_toggle_toc",
+        "_act_toggle_file_tree",
+    ):
         act = getattr(window, attr)
         assert not act.icon().isNull(), f"{attr} 缺少图标"
         assert act in bar_actions, f"{attr} 应出现在工具栏"

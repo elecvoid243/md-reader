@@ -158,6 +158,30 @@ def _draw_export(p: QPainter, color: str) -> None:
     p.drawPath(head)
 
 
+def _draw_sidebar(p: QPainter, color: str, left: bool) -> None:
+    """侧栏面板：外框 + 一侧填充（left=True 填充左侧）"""
+    p.setPen(QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    p.setBrush(Qt.NoBrush)
+    p.drawRoundedRect(QRectF(3.5, 5, 17, 14), 2, 2)
+    line_x = 9.5 if left else 14.5
+    p.drawLine(QPointF(line_x, 5), QPointF(line_x, 19))
+    # 侧栏区域填充（内缩避免与外框描边重叠）
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(QColor(color)))
+    fill_x = 4.7 if left else 15.0
+    p.drawRect(QRectF(fill_x, 6.5, 4.3, 11))
+
+
+def _draw_sidebar_left(p: QPainter, color: str) -> None:
+    """左侧栏显隐"""
+    _draw_sidebar(p, color, left=True)
+
+
+def _draw_sidebar_right(p: QPainter, color: str) -> None:
+    """右侧栏显隐"""
+    _draw_sidebar(p, color, left=False)
+
+
 _DRAW = {
     "reading": _draw_reading,
     "instant": _draw_instant,
@@ -167,6 +191,8 @@ _DRAW = {
     "open": _draw_open,
     "save": _draw_save,
     "export": _draw_export,
+    "sidebar_left": _draw_sidebar_left,
+    "sidebar_right": _draw_sidebar_right,
 }
 
 NAMES = list(_DRAW)
