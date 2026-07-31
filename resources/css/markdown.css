@@ -381,7 +381,7 @@ body {
 
 /* ══════════════ 滚动条 ══════════════ */
 
-::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
     background: var(--scrollbar);
