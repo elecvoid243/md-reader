@@ -64,10 +64,10 @@ class MainWindow(QMainWindow):
         self._setup_statusbar()
         self._connect_signals()
 
-        # 应用保存的主题
+        # 应用浅色主题（深色模式已移除）
         app = QApplication.instance()
         if app:
-            self._theme_mgr.apply_theme(self._theme_mgr.current_theme, app)
+            self._theme_mgr.apply_theme(app)
             self._apply_editor_theme()
 
         # 始终保留一个标签页：启动即打开空白的「未命名」页，
@@ -247,13 +247,6 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        self._act_toggle_theme = QAction("切换深色/浅色主题", self)
-        self._act_toggle_theme.setShortcut("Ctrl+Shift+D")
-        self._act_toggle_theme.triggered.connect(self._toggle_theme)
-        view_menu.addAction(self._act_toggle_theme)
-
-        view_menu.addSeparator()
-
         self._act_scroll_sync = QAction("滚动同步", self)
         self._act_scroll_sync.setCheckable(True)
         self._act_scroll_sync.setChecked(self._config.get("scroll_sync", True))
@@ -277,12 +270,11 @@ class MainWindow(QMainWindow):
         toolbar.setIconSize(QSize(18, 18))
         self.addToolBar(toolbar)
 
-        # 左侧：常用操作（打开/保存/导出/主题），图标经 defaultAction 共享
+        # 左侧：常用操作（打开/保存/导出），图标经 defaultAction 共享
         for act in (
             self._act_open,
             self._act_save,
             self._act_export_pdf,
-            self._act_toggle_theme,
         ):
             toolbar.addAction(act)
 
@@ -305,7 +297,6 @@ class MainWindow(QMainWindow):
             self._act_open: "open",
             self._act_save: "save",
             self._act_export_pdf: "export",
-            self._act_toggle_theme: "theme",
         }
         # 纯图标按钮的悬浮提示
         self._act_mode_reading.setToolTip("阅读模式 (Ctrl+Shift+R)")
@@ -315,7 +306,6 @@ class MainWindow(QMainWindow):
         self._act_open.setToolTip("打开文件 (Ctrl+O)")
         self._act_save.setToolTip("保存 (Ctrl+S)")
         self._act_export_pdf.setToolTip("导出为 PDF")
-        self._act_toggle_theme.setToolTip("切换深色/浅色主题 (Ctrl+Shift+D)")
         self._apply_action_icons()
 
     def _apply_action_icons(self) -> None:
@@ -590,19 +580,6 @@ class MainWindow(QMainWindow):
     def _toggle_toc(self, visible: bool) -> None:
         self._toc_dock.setVisible(visible)
         self._config.set("show_toc", visible)
-
-    def _toggle_theme(self) -> None:
-        app = QApplication.instance()
-        if app:
-            new_theme = self._theme_mgr.toggle(app)
-            self._apply_editor_theme()
-            self._refresh_icons()  # 图标颜色随主题重建
-            # 通知所有预览面板切换主题
-            for i in range(self._tabs.count()):
-                pair = self._tabs.widget(i)
-                if isinstance(pair, EditorPreviewPair):
-                    pair.preview.set_theme(new_theme)
-            self._status_file.setText(f"主题: {new_theme}")
 
     def _apply_editor_theme(self) -> None:
         """将主题样式应用到所有编辑器（QSS + 绘制配色 + Vditor）"""

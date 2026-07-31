@@ -7,9 +7,9 @@ ui_smoke.py — 界面冒烟验证（offscreen 无头模式）
 验证项:
 1. MainWindow 可实例化（含工具栏/双 dock/标签管理器）
 2. dock 位置: TOC 在左、文件浏览器在右
-3. 两套主题均可应用（QSS 构建无 KeyError）
-4. 全部图标可构建（含新增的 open/save/export/theme）
-5. 工具栏包含 4 个常用 action（且均有图标）
+3. 浅色主题可应用（QSS 构建无 KeyError；深色模式已移除）
+4. 全部图标可构建（含新增的 open/save/export）
+5. 工具栏包含 3 个常用 action（且均有图标）
 6. 启动即有一个空白「未命名」占位标签页
 7. 打开示例文件后占位页被替换，仅余 1 个文件标签页
 8. 关闭最后一个标签页后自动补一个空白占位页
@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.icons import NAMES, build_icons  # noqa: E402
 from app.main_window import MainWindow  # noqa: E402
-from app.theme_manager import DARK_PALETTE, LIGHT_PALETTE  # noqa: E402
+from app.theme_manager import LIGHT_PALETTE  # noqa: E402
 
 EXPECTED_ICONS = {
     "reading",
@@ -46,7 +46,6 @@ EXPECTED_ICONS = {
     "open",
     "save",
     "export",
-    "theme",
 }
 
 
@@ -64,10 +63,8 @@ def main() -> int:
     assert dock_area(window._toc_dock) == int(Qt.LeftDockWidgetArea), "TOC 应在左侧"
     assert dock_area(window._file_dock) == int(Qt.RightDockWidgetArea), "文件树应在右侧"
 
-    # 2. 两套主题应用（QSS 构建不抛 KeyError）
-    window._theme_mgr.apply_theme("light", app)
-    window._theme_mgr.apply_theme("dark", app)
-    window._theme_mgr.apply_theme("light", app)
+    # 2. 浅色主题应用（QSS 构建不抛 KeyError；深色模式已移除）
+    window._theme_mgr.apply_theme(app)
 
     # 3. 图标全集
     missing = EXPECTED_ICONS - set(NAMES)
@@ -75,15 +72,14 @@ def main() -> int:
     icons = build_icons(LIGHT_PALETTE)
     assert set(icons) >= EXPECTED_ICONS
     assert not icons["open"].isNull()
-    build_icons(DARK_PALETTE)
 
-    # 4. 工具栏包含 4 个常用 action（且均有图标）
+    # 4. 工具栏包含 3 个常用 action（且均有图标）
     from PyQt5.QtWidgets import QToolBar
 
     bars = window.findChildren(QToolBar)
     assert bars, "应存在主工具栏"
     bar_actions = bars[0].actions()
-    for attr in ("_act_open", "_act_save", "_act_export_pdf", "_act_toggle_theme"):
+    for attr in ("_act_open", "_act_save", "_act_export_pdf"):
         act = getattr(window, attr)
         assert not act.icon().isNull(), f"{attr} 缺少图标"
         assert act in bar_actions, f"{attr} 应出现在工具栏"

@@ -1,19 +1,18 @@
 """
-theme_manager.py — 主题管理（「墨与纸」设计系统）
+theme_manager.py — 主题管理（「墨与纸 · 昼」设计系统，固定浅色）
 
 以调色板 (palette) 为单一数据源，统一驱动：
 - 主窗口 QSS 样式表（菜单栏/工具栏/标签页/停靠栏/状态栏）
 - 编辑器配色（背景/行号栏/当前行/选区/光标）
-- 预览区 CSS 主题切换（JS 端）
+- 预览区 CSS 主题（固定 theme-light.css）
 
-调色板与 resources/css/theme-*.css 保持同一设计语言。
+调色板与 resources/css/theme-light.css 保持同一设计语言。
+（2026-07-31 起移除深色模式，应用固定为浅色主题）
 """
 
 from __future__ import annotations
 
 from PyQt5.QtWidgets import QApplication
-
-from .config import Config
 
 # ══════════════════════════════════════════════
 #  调色板定义（与 CSS 主题同源）
@@ -53,42 +52,6 @@ LIGHT_PALETTE = {
     "scrollbar": "#cbc4b2",
     "scrollbar_hov": "#b3ab96",
 }
-
-DARK_PALETTE = {
-    # 应用外壳
-    "chrome": "#14161a",
-    "chrome_alt": "#101216",
-    "surface": "#1e2126",
-    "inset": "#171a1e",
-    # 文本
-    "ink": "#d5d1c6",
-    "ink_strong": "#ece8dd",
-    "ink_muted": "#8b867a",
-    "ink_faint": "#5f5b51",
-    # 主色
-    "accent": "#4db6a2",
-    "accent_strong": "#6cc9b7",
-    "accent_soft": "#1d3833",
-    "amber": "#d9a94f",
-    # 线条
-    "border": "#2c3037",
-    "border_strong": "#3a3f47",
-    "hairline": "#262a30",
-    # 交互
-    "hover": "#262b32",
-    "pressed": "#2e343c",
-    "selection": "#26463f",
-    # 编辑器
-    "editor_bg": "#1e2126",
-    "gutter_bg": "#191c21",
-    "gutter_ink": "#57534a",
-    "current_line": "#252932",
-    "caret": "#4db6a2",
-    # 滚动条
-    "scrollbar": "#3d434c",
-    "scrollbar_hov": "#4d545f",
-}
-
 
 def _build_qss(p: dict) -> str:
     """由调色板生成整窗 QSS 样式表"""
@@ -445,27 +408,20 @@ QPlainTextEdit {{
 
 
 class ThemeManager:
-    """主题管理器：以调色板驱动全应用样式"""
-
-    def __init__(self) -> None:
-        self._config = Config()
-        self._current_theme: str = self._config.get("theme", "light")
+    """主题管理器：以调色板驱动全应用样式（固定浅色「墨与纸 · 昼」）"""
 
     @property
     def current_theme(self) -> str:
-        return self._current_theme
+        return "light"
 
     @property
     def palette(self) -> dict:
         """当前主题的调色板"""
-        return DARK_PALETTE if self._current_theme == "dark" else LIGHT_PALETTE
+        return LIGHT_PALETTE
 
-    def apply_theme(self, theme_name: str, app: QApplication) -> None:
+    def apply_theme(self, app: QApplication) -> None:
         """应用主题到整个应用"""
-        self._current_theme = theme_name
-        self._config.set("theme", theme_name)
-        p = self.palette
-        app.setStyleSheet(_build_qss(p))
+        app.setStyleSheet(_build_qss(self.palette))
 
     def get_editor_style(self) -> str:
         """获取编辑器 QSS"""
@@ -481,9 +437,3 @@ class ThemeManager:
             "caret": p["caret"],
             "border": p["hairline"],
         }
-
-    def toggle(self, app: QApplication) -> str:
-        """切换主题，返回新主题名"""
-        new_theme = "dark" if self._current_theme == "light" else "light"
-        self.apply_theme(new_theme, app)
-        return new_theme

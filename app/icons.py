@@ -158,21 +158,6 @@ def _draw_export(p: QPainter, color: str) -> None:
     p.drawPath(head)
 
 
-def _draw_theme(p: QPainter, color: str) -> None:
-    """半满圆：主题切换（亮暗通用）"""
-    p.setPen(QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    p.setBrush(Qt.NoBrush)
-    p.drawEllipse(QPointF(12, 12), 8, 8)
-    # 右半填充（startAngle 90° = 正上方，span -180° 顺时针扫过右半圆）
-    half = QPainterPath()
-    half.moveTo(12, 12)
-    half.arcTo(QRectF(4, 4, 16, 16), 90, -180)
-    half.closeSubpath()
-    p.setPen(Qt.NoPen)
-    p.setBrush(QBrush(QColor(color)))
-    p.drawPath(half)
-
-
 _DRAW = {
     "reading": _draw_reading,
     "instant": _draw_instant,
@@ -182,7 +167,6 @@ _DRAW = {
     "open": _draw_open,
     "save": _draw_save,
     "export": _draw_export,
-    "theme": _draw_theme,
 }
 
 NAMES = list(_DRAW)
