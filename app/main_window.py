@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QStatusBar,
     QToolBar,
     QToolButton,
@@ -95,19 +96,19 @@ class MainWindow(QMainWindow):
         self._tabs = TabManager()
         self.setCentralWidget(self._tabs)
 
-        # 左侧停靠：文件树
-        self._file_tree = FileTreeWidget()
-        self._file_dock = QDockWidget("文件浏览器", self)
-        self._file_dock.setWidget(self._file_tree)
-        self._file_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self._file_dock)
-
-        # 右侧停靠：TOC 导航
+        # 左侧停靠：TOC 导航（布局固定，仅允许左侧）
         self._toc = TocWidget()
         self._toc_dock = QDockWidget("目录导航", self)
         self._toc_dock.setWidget(self._toc)
-        self._toc_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        self.addDockWidget(Qt.RightDockWidgetArea, self._toc_dock)
+        self._toc_dock.setAllowedAreas(Qt.LeftDockWidgetArea)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self._toc_dock)
+
+        # 右侧停靠：文件树（布局固定，仅允许右侧）
+        self._file_tree = FileTreeWidget()
+        self._file_dock = QDockWidget("文件浏览器", self)
+        self._file_dock.setWidget(self._file_tree)
+        self._file_dock.setAllowedAreas(Qt.RightDockWidgetArea)
+        self.addDockWidget(Qt.RightDockWidgetArea, self._file_dock)
 
         # 恢复侧边栏可见性
         self._file_dock.setVisible(self._config.get("show_file_tree", True))
@@ -272,7 +273,21 @@ class MainWindow(QMainWindow):
         toolbar.setIconSize(QSize(18, 18))
         self.addToolBar(toolbar)
 
-        # 工具栏仅保留模式切换分段控件（其余功能在菜单栏）
+        # 左侧：常用操作（打开/保存/导出/主题），图标经 defaultAction 共享
+        for act in (
+            self._act_open,
+            self._act_save,
+            self._act_export_pdf,
+            self._act_toggle_theme,
+        ):
+            toolbar.addAction(act)
+
+        # 弹簧：把模式胶囊推到右侧
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        toolbar.addWidget(spacer)
+
+        # 右侧：模式切换分段控件
         toolbar.addWidget(self._build_mode_segment())
 
     def _init_icons(self) -> None:
@@ -283,12 +298,20 @@ class MainWindow(QMainWindow):
             self._act_mode_instant: "instant",
             self._act_mode_source: "source",
             self._act_dual_pane: "pane_dual",
+            self._act_open: "open",
+            self._act_save: "save",
+            self._act_export_pdf: "export",
+            self._act_toggle_theme: "theme",
         }
         # 纯图标按钮的悬浮提示
         self._act_mode_reading.setToolTip("阅读模式 (Ctrl+Shift+R)")
         self._act_mode_instant.setToolTip("即时渲染 (Ctrl+Shift+I)")
         self._act_mode_source.setToolTip("源码编辑 (Ctrl+Shift+M)")
         self._act_dual_pane.setToolTip("双栏预览 (Ctrl+Shift+P)")
+        self._act_open.setToolTip("打开文件 (Ctrl+O)")
+        self._act_save.setToolTip("保存 (Ctrl+S)")
+        self._act_export_pdf.setToolTip("导出为 PDF")
+        self._act_toggle_theme.setToolTip("切换深色/浅色主题 (Ctrl+Shift+D)")
         self._apply_action_icons()
 
     def _apply_action_icons(self) -> None:
