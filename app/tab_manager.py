@@ -39,6 +39,9 @@ class EditorPreviewPair(QWidget):
         self.is_dirty: bool = False
         self.view_mode: str = "reading"  # reading / edit / instant
         self.dual_pane: bool = True  # 源码编辑模式下是否显示预览
+        # 视图模式是否已真正应用过（防止 set_view_mode 的相同模式短路
+        # 导致新标签页保持"编辑器+预览都可见"的初始状态）
+        self._mode_applied: bool = False
         self._vditor_pane: VditorPane | None = None  # 懒加载
 
         # 分割器：左编辑 右预览
@@ -196,7 +199,11 @@ class EditorPreviewPair(QWidget):
         # 浮动单/双栏控件可见性必须始终与模式同步（即便下方提前返回）
         self._pane_toggle.setVisible(mode == "edit")
 
-        if mode == self.view_mode and dual_pane == self.dual_pane:
+        if (
+            self._mode_applied
+            and mode == self.view_mode
+            and dual_pane == self.dual_pane
+        ):
             return
 
         # 离开即时渲染模式：需先异步取回 Vditor 内容，再切换
@@ -224,6 +231,7 @@ class EditorPreviewPair(QWidget):
         """实际应用模式：控制三个面板的显隐 + 浮动控件"""
         self.view_mode = mode
         self.dual_pane = dual_pane
+        self._mode_applied = True
 
         # 浮动单/双栏控件仅在源码编辑模式显示
         show_pane = mode == "edit"

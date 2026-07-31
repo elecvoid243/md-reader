@@ -136,6 +136,13 @@ def main() -> int:
     assert captured and captured[0], "单栏源码模式下应发射 headings_changed"
     pair.set_view_mode("reading", True)
 
+    # 8b. 新标签页首次设置 reading 模式必须真正应用（不得短路成双栏）
+    fresh = window._tabs.add_tab()
+    fresh.set_view_mode("reading", True)
+    assert fresh.editor.isHidden(), "阅读模式下新标签页不应显示编辑器"
+    assert not fresh.preview.isHidden(), "阅读模式下新标签页应显示预览"
+    window._tabs.discard_pair(fresh)
+
     # 9. 关闭最后一个标签页 → 自动补空白占位页
     window._tabs.close_tab(0)
     assert window._tabs.count() == 1, "关闭最后标签页后应自动补占位页"
