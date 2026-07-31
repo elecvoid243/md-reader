@@ -12,7 +12,19 @@ theme_manager.py — 主题管理（「墨与纸 · 昼」设计系统，固定�
 
 from __future__ import annotations
 
+import os
+
 from PyQt5.QtWidgets import QApplication
+
+# 资源目录（相对于项目根目录）
+_RESOURCES_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources"
+)
+# QSS url() 需要正斜杠路径
+_TAB_CLOSE_SVG = os.path.join(_RESOURCES_DIR, "icons", "tab-close.svg").replace("\\", "/")
+_TAB_CLOSE_HOVER_SVG = os.path.join(
+    _RESOURCES_DIR, "icons", "tab-close-hover.svg"
+).replace("\\", "/")
 
 # ══════════════════════════════════════════════
 #  调色板定义（与 CSS 主题同源）
@@ -34,6 +46,8 @@ LIGHT_PALETTE = {
     "accent_strong": "#0a5546",
     "accent_soft": "#dcebe5",
     "amber": "#b8862b",
+    # 语义：标签关闭按钮悬停（朱砂）
+    "vermilion": "#b8544f",
     # 线条
     "border": "#d8d2c2",
     "border_strong": "#c9c2ae",
@@ -171,11 +185,14 @@ QTabBar::tab:selected {{
     font-weight: 600;
 }}
 QTabBar::close-button {{
+    image: url("{_TAB_CLOSE_SVG}");
     border-radius: 4px;
     padding: 2px;
+    margin: 1px;
 }}
 QTabBar::close-button:hover {{
-    background-color: {p["pressed"]};
+    image: url("{_TAB_CLOSE_HOVER_SVG}");
+    background-color: {p["vermilion"]};
 }}
 
 /* ═══ 停靠栏（文件树 / TOC） ═══ */

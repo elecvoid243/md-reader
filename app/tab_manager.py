@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 
-from PyQt5.QtCore import QSize, QTimer, pyqtSignal
+from PyQt5.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QButtonGroup,
@@ -348,6 +348,8 @@ class TabManager(QTabWidget):
         self.setTabsClosable(True)
         self.setMovable(True)
         self.setDocumentMode(True)
+        # 超长标签右侧省略（Qt 默认中间省略，不符合阅读习惯）
+        self.setElideMode(Qt.ElideRight)
 
         self.tabCloseRequested.connect(self.close_tab)
         self.currentChanged.connect(self._on_current_changed)
@@ -371,6 +373,8 @@ class TabManager(QTabWidget):
 
         title = self._make_title(file_path)
         idx = self.addTab(pair, title)
+        # 悬浮提示完整路径（标签超长被省略时可查看）
+        self.setTabToolTip(idx, file_path or "未保存的文档")
         self.setCurrentIndex(idx)
 
         # 初始渲染
@@ -469,6 +473,8 @@ class TabManager(QTabWidget):
             if pair.is_dirty:
                 title = "● " + title
             self.setTabText(index, title)
+            # 另存为后路径可能变化，同步悬浮提示
+            self.setTabToolTip(index, pair.file_path or "未保存的文档")
 
     def _on_current_changed(self, index: int) -> None:
         pair = self.current_pair()
