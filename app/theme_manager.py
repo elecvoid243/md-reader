@@ -49,9 +49,6 @@ LIGHT_PALETTE = {
     "gutter_ink": "#b3ab96",
     "current_line": "#f4f1e6",
     "caret": "#0e6b5a",
-    # 状态栏
-    "status_bg": "#0e6b5a",
-    "status_ink": "#eaf4f0",
     # 滚动条
     "scrollbar": "#cbc4b2",
     "scrollbar_hov": "#b3ab96",
@@ -87,9 +84,6 @@ DARK_PALETTE = {
     "gutter_ink": "#57534a",
     "current_line": "#252932",
     "caret": "#4db6a2",
-    # 状态栏
-    "status_bg": "#0f5a4c",
-    "status_ink": "#dcefe9",
     # 滚动条
     "scrollbar": "#3d434c",
     "scrollbar_hov": "#4d545f",
@@ -164,8 +158,8 @@ QToolBar {{
     background-color: {p["chrome"]};
     border: none;
     border-bottom: 1px solid {p["hairline"]};
-    spacing: 3px;
-    padding: 4px 6px;
+    spacing: 4px;
+    padding: 5px 10px;
 }}
 QToolButton {{
     background: transparent;
@@ -208,7 +202,7 @@ QTabBar::tab:hover {{
 QTabBar::tab:selected {{
     color: {p["ink_strong"]};
     border-bottom: 2px solid {p["accent"]};
-    background-color: {p["chrome_alt"]};
+    background: transparent;
     font-weight: 600;
 }}
 QTabBar::close-button {{
@@ -257,17 +251,20 @@ QTreeView, QTreeWidget {{
     font-size: 13px;
     padding: 4px;
 }}
-QTreeView::item {{
+QTreeView::item, QTreeWidget::item {{
     padding: 4px 6px;
     border-radius: 5px;
     color: {p["ink"]};
 }}
-QTreeView::item:hover {{
+QTreeView::item:hover, QTreeWidget::item:hover {{
     background-color: {p["hover"]};
 }}
-QTreeView::item:selected {{
+QTreeView::item:selected, QTreeWidget::item:selected {{
     background-color: {p["accent_soft"]};
     color: {p["accent_strong"]};
+    border-left: 2px solid {p["accent"]};
+    border-radius: 0 5px 5px 0;
+    padding-left: 4px;
 }}
 QTreeView::branch:has-children:!has-siblings:closed,
 QTreeView::branch:closed:has-children:has-siblings {{
@@ -286,25 +283,28 @@ QSplitter::handle:hover {{
 
 /* ═══ 状态栏 ═══ */
 QStatusBar {{
-    background-color: {p["status_bg"]};
-    color: {p["status_ink"]};
+    background-color: {p["chrome"]};
+    color: {p["ink_muted"]};
     font-size: 12px;
-    border-top: none;
+    border-top: 1px solid {p["hairline"]};
+}}
+QStatusBar::item {{
+    border: none;
 }}
 QStatusBar QLabel {{
-    color: {p["status_ink"]};
+    color: {p["ink_muted"]};
     padding: 0 10px;
 }}
 
 /* ═══ 滚动条 ═══ */
 QScrollBar:vertical {{
     background: transparent;
-    width: 11px;
+    width: 8px;
     margin: 0;
 }}
 QScrollBar::handle:vertical {{
     background: {p["scrollbar"]};
-    border-radius: 5px;
+    border-radius: 4px;
     min-height: 24px;
     margin: 2px;
 }}
@@ -316,11 +316,11 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
 }}
 QScrollBar:horizontal {{
     background: transparent;
-    height: 11px;
+    height: 8px;
 }}
 QScrollBar::handle:horizontal {{
     background: {p["scrollbar"]};
-    border-radius: 5px;
+    border-radius: 4px;
     min-width: 24px;
     margin: 2px;
 }}
@@ -363,16 +363,10 @@ QPushButton:default:hover {{
     background-color: {p["accent_strong"]};
 }}
 
-/* ═══ 工具栏 ═══ */
-QToolBar {{
-    padding: 7px 14px;
-    spacing: 10px;
-}}
-
 /* ═══ 模式分段控件（胶囊槽 + 选中滑块） ═══ */
 QWidget#mode_seg {{
     background-color: {p["inset"]};
-    border: 1px solid {p["border"]};
+    border: none;
     border-radius: 9px;
 }}
 QWidget#mode_seg QToolButton {{
