@@ -52,6 +52,9 @@ class MainWindow(QMainWindow):
         self._config = Config()
         self._theme_mgr = ThemeManager()
 
+        # TOC 信号当前绑定的标签页（_on_pair_changed 负责换绑）
+        self._toc_bound_pair = None
+
         # 视图模式状态（阅读/编辑 + 双栏）
         self._view_mode: str = self._config.get("view_mode", "reading")
         self._dual_pane: bool = self._config.get("dual_pane", True)
@@ -422,10 +425,6 @@ class MainWindow(QMainWindow):
         # 清理未动过的空白占位页（启动时自动创建的"未命名"）
         self._drop_placeholder_tab(except_pair=pair)
 
-        # 连接 TOC 信号（JS 渲染产物 + 源码提取兜底）
-        pair.preview.toc_updated.connect(self._toc.update_toc)
-        pair.headings_changed.connect(self._toc.update_toc)
-
         # 应用当前视图模式（默认阅读模式）
         self._apply_view_mode_to_pair(pair)
 
@@ -497,8 +496,6 @@ class MainWindow(QMainWindow):
 
     def _new_tab(self) -> None:
         pair = self._tabs.add_tab()
-        pair.preview.toc_updated.connect(self._toc.update_toc)
-        pair.headings_changed.connect(self._toc.update_toc)
         self._apply_view_mode_to_pair(pair)
 
     @staticmethod
@@ -625,18 +622,31 @@ class MainWindow(QMainWindow):
 
     def _on_pair_changed(self, pair) -> None:
         """标签页切换时更新关联组件"""
+        # TOC 信号只跟随当前标签页：先解绑旧标签页，避免后台
+        # 标签页重渲染时其 TOC 抢先刷入导航栏（视图切换闪烁的根因）
+        old = self._toc_bound_pair
+        if old is not None and old is not pair:
+            try:
+                old.preview.toc_updated.disconnect(self._toc.update_toc)
+                old.headings_changed.disconnect(self._toc.update_toc)
+            except (TypeError, RuntimeError):
+                pass
+        self._toc_bound_pair = pair
+
         if pair is None:
             self._toc.clear_toc()
             self._status_file.setText("就绪")
             self.setWindowTitle("MD Reader — Markdown 阅读器")
             return
 
-        # 重新连接 TOC（断开旧的，连接新的）
+        # 绑定当前标签页的 TOC 信号（JS 渲染产物 + 源码提取兜底）
         try:
             pair.preview.toc_updated.disconnect(self._toc.update_toc)
-        except TypeError:
+            pair.headings_changed.disconnect(self._toc.update_toc)
+        except (TypeError, RuntimeError):
             pass
         pair.preview.toc_updated.connect(self._toc.update_toc)
+        pair.headings_changed.connect(self._toc.update_toc)
 
         # 触发一次渲染以刷新 TOC
         pair.render_now()

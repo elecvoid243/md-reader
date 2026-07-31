@@ -117,6 +117,7 @@ def main() -> int:
     assert window._tabs.count() == 1, "占位页应被替换，仅余 1 个标签页"
     pair = window._tabs.current_pair()
     assert pair is not None and pair.file_path == sample, "当前标签页应为示例文件"
+    assert window._toc_bound_pair is pair, "TOC 信号应绑定当前标签页"
 
     # 7. TOC 源码提取（即时渲染/单栏源码模式的 TOC 数据源）
     from app.toc_widget import extract_headings
@@ -140,6 +141,7 @@ def main() -> int:
     assert window._tabs.count() == 1, "关闭最后标签页后应自动补占位页"
     reborn = window._tabs.current_pair()
     assert reborn is not None and reborn.file_path is None
+    assert window._toc_bound_pair is reborn, "关闭后 TOC 信号应换绑到新占位页"
 
     print("ui_smoke: OK")
     sys.stdout.flush()
