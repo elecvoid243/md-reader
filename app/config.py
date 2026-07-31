@@ -22,7 +22,7 @@ _DEFAULTS: dict[str, Any] = {
     "window_x": 100,
     "window_y": 100,
     "last_folder": "",
-    "show_file_tree": True,
+    "show_file_tree": False,  # 首次启动默认隐藏右侧文件浏览器，用户可自行展开
     "show_toc": True,
     "scroll_sync": True,
     "view_mode": "reading",   # reading（默认阅读模式）/ edit

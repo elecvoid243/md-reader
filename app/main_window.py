@@ -123,8 +123,8 @@ class MainWindow(QMainWindow):
         self._file_dock.setFeatures(QDockWidget.DockWidgetClosable)
         self.addDockWidget(Qt.RightDockWidgetArea, self._file_dock)
 
-        # 恢复侧边栏可见性
-        self._file_dock.setVisible(self._config.get("show_file_tree", True))
+        # 恢复侧边栏可见性（首次启动：左栏显示，右栏隐藏）
+        self._file_dock.setVisible(self._config.get("show_file_tree", False))
         self._toc_dock.setVisible(self._config.get("show_toc", True))
 
         # 恢复上次打开的文件夹
@@ -242,7 +242,7 @@ class MainWindow(QMainWindow):
 
         self._act_toggle_file_tree = QAction("文件浏览器", self)
         self._act_toggle_file_tree.setCheckable(True)
-        self._act_toggle_file_tree.setChecked(self._config.get("show_file_tree", True))
+        self._act_toggle_file_tree.setChecked(self._config.get("show_file_tree", False))
         self._act_toggle_file_tree.setShortcut("Ctrl+Shift+E")
         self._act_toggle_file_tree.toggled.connect(self._toggle_file_tree)
         view_menu.addAction(self._act_toggle_file_tree)
