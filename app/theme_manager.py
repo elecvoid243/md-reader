@@ -275,9 +275,19 @@ QTreeView::branch:closed:has-children:has-siblings {{
 QSplitter::handle {{
     background-color: {p["hairline"]};
 }}
-QSplitter::handle:horizontal {{ width: 1px; }}
-QSplitter::handle:vertical {{ height: 1px; }}
+QSplitter::handle:horizontal {{ width: 2px; }}
+QSplitter::handle:vertical {{ height: 2px; }}
 QSplitter::handle:hover {{
+    background-color: {p["accent"]};
+}}
+
+/* ═══ 主窗口分隔条（停靠栏与中央区之间，可拖拽调整宽度） ═══ */
+QMainWindow::separator {{
+    background-color: {p["border"]};
+    width: 4px;
+    height: 4px;
+}}
+QMainWindow::separator:hover {{
     background-color: {p["accent"]};
 }}
 
