@@ -34,7 +34,7 @@ from .file_tree import FileTreeWidget
 from .icons import build_icons
 from .tab_manager import EditorPreviewPair, TabManager
 from .theme_manager import ThemeManager
-from .toc_widget import TocWidget
+from .toc_widget import TocWidget, extract_headings
 
 # 支持的文件扩展名
 _MD_EXTENSIONS = {".md", ".markdown", ".mdown", ".txt"}
@@ -422,8 +422,9 @@ class MainWindow(QMainWindow):
         # 清理未动过的空白占位页（启动时自动创建的"未命名"）
         self._drop_placeholder_tab(except_pair=pair)
 
-        # 连接 TOC 信号
+        # 连接 TOC 信号（JS 渲染产物 + 源码提取兜底）
         pair.preview.toc_updated.connect(self._toc.update_toc)
+        pair.headings_changed.connect(self._toc.update_toc)
 
         # 应用当前视图模式（默认阅读模式）
         self._apply_view_mode_to_pair(pair)
@@ -497,6 +498,7 @@ class MainWindow(QMainWindow):
     def _new_tab(self) -> None:
         pair = self._tabs.add_tab()
         pair.preview.toc_updated.connect(self._toc.update_toc)
+        pair.headings_changed.connect(self._toc.update_toc)
         self._apply_view_mode_to_pair(pair)
 
     @staticmethod
@@ -657,32 +659,25 @@ class MainWindow(QMainWindow):
         if not pair:
             return
 
+        # 在源码中定位标题（统一走 extract_headings，id 规则与 JS 端一致）
+        entry = None
+        for e in extract_headings(pair.editor.get_text()):
+            if e["id"] == heading_id:
+                entry = e
+                break
+
+        # 即时渲染模式：滚动 Vditor 到标题
+        if pair.view_mode == "instant":
+            if entry and pair.vditor_pane is not None:
+                pair.vditor_pane.scroll_to_heading(entry["text"])
+            return
+
         # 预览区滚动到标题
         pair.preview.scroll_to_heading(heading_id)
 
-        # 编辑器跳转到对应行（通过搜索标题文本）
-        # 简单实现：搜索以 # 开头的匹配行
-        text = pair.editor.get_text()
-        lines = text.split("\n")
-        target_prefix = "#" * level + " "
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith(target_prefix):
-                # 简单匹配：生成 id 比较
-                heading_text = stripped[len(target_prefix) :].strip()
-                generated_id = self._make_heading_id(heading_text)
-                if generated_id == heading_id:
-                    pair.editor.goto_line(i + 1)
-                    break
-
-    @staticmethod
-    def _make_heading_id(text: str) -> str:
-        """模拟 JS 端的标题 id 生成逻辑"""
-        import re
-
-        hid = re.sub(r"[^\w\u4e00-\u9fff]+", "-", text.lower())
-        hid = hid.strip("-")
-        return hid or "heading"
+        # 编辑器跳转到对应行
+        if entry:
+            pair.editor.goto_line(entry["line"])
 
     # ──────────────────────────────────────────
     #  拖放支持

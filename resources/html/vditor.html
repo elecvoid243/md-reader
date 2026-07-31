@@ -109,6 +109,22 @@
         window.focusVditor = function () {
             if (window.vditor) window.vditor.focus();
         };
+
+        // TOC 跳转：滚动到指定文本的标题（即时渲染模式）
+        window.scrollVditorToHeading = function (text) {
+            var container = document.querySelector('.vditor-ir .vditor-reset')
+                || document.querySelector('.vditor-reset');
+            if (!container) return;
+            var heads = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
+            for (var i = 0; i < heads.length; i++) {
+                // IR 模式下标题可能含 Markdown 标记（# 号），比较时剥掉
+                var label = heads[i].textContent.replace(/^#+\s*/, '').trim();
+                if (label === text) {
+                    heads[i].scrollIntoView({ block: 'start', behavior: 'smooth' });
+                    return;
+                }
+            }
+        };
     </script>
 </body>
 </html>

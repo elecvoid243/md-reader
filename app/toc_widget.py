@@ -7,8 +7,60 @@ toc_widget.py — 目录 (TOC) 导航面板
 
 from __future__ import annotations
 
+import re
+
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
+
+
+def make_heading_id(text: str, used: dict) -> str:
+    """
+    生成标题 id（与 resources/js/render.js 的 addHeadingIds 规则一致）
+
+    规则：小写 → 非单词/中文字符折叠为 '-' → 去首尾 '-' → 空则 'heading'；
+    重复 id 追加 '-2', '-3' 序号（used 为跨调用共享的计数器）。
+    """
+    hid = re.sub(r"[^\w\u4e00-\u9fff]+", "-", text.lower()).strip("-")
+    if not hid:
+        hid = "heading"
+    if hid in used:
+        used[hid] += 1
+        hid = f"{hid}-{used[hid]}"
+    else:
+        used[hid] = 1
+    return hid
+
+
+def extract_headings(text: str) -> list[dict]:
+    """
+    从 Markdown 源码提取 TOC 条目（预览不渲染时的 TOC 数据源）
+
+    返回: [{level: int, text: str, id: str, line: int(1-based)}, ...]
+    跳过 fenced 代码块内的伪标题；id 规则与 JS 端渲染结果一致。
+    """
+    headings: list[dict] = []
+    used: dict = {}
+    in_code = False
+    for lineno, line in enumerate(text.split("\n"), start=1):
+        stripped = line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        m = re.match(r"^(#{1,6})\s+(.+?)\s*#*\s*$", stripped)
+        if m:
+            level = len(m.group(1))
+            htext = m.group(2)
+            headings.append(
+                {
+                    "level": level,
+                    "text": htext,
+                    "id": make_heading_id(htext, used),
+                    "line": lineno,
+                }
+            )
+    return headings
 
 
 class TocWidget(QWidget):

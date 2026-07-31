@@ -12,7 +12,9 @@ ui_smoke.py — 界面冒烟验证（offscreen 无头模式）
 5. 工具栏包含 5 个常用 action（且均有图标）
 6. 启动即有一个空白「未命名」占位标签页
 7. 打开示例文件后占位页被替换，仅余 1 个文件标签页
-8. 关闭最后一个标签页后自动补一个空白占位页
+8. TOC 源码提取规则正确（层级/id去重/行号/跳过代码块）
+9. 预览不可见时 headings_changed 正常发射
+10. 关闭最后一个标签页后自动补一个空白占位页
 
 用法: python scripts\\ui_smoke.py   (退出码 0 = 通过)
 
@@ -116,14 +118,34 @@ def main() -> int:
     pair = window._tabs.current_pair()
     assert pair is not None and pair.file_path == sample, "当前标签页应为示例文件"
 
-    # 7. 关闭最后一个标签页 → 自动补空白占位页
+    # 7. TOC 源码提取（即时渲染/单栏源码模式的 TOC 数据源）
+    from app.toc_widget import extract_headings
+
+    md = "# Title\n\n## Sub\n\n```\n# not a heading\n```\n\n# Title\n"
+    hs = extract_headings(md)
+    assert [h["level"] for h in hs] == [1, 2, 1], hs
+    assert hs[0]["id"] == "title" and hs[2]["id"] == "title-2", hs
+    assert hs[0]["line"] == 1 and hs[2]["line"] == 9, hs
+
+    # 8. 预览不可见（单栏源码）时 headings_changed 正常发射
+    captured = []
+    pair.headings_changed.connect(captured.append)
+    pair.set_view_mode("edit", False)
+    pair.render_now()
+    assert captured and captured[0], "单栏源码模式下应发射 headings_changed"
+    pair.set_view_mode("reading", True)
+
+    # 9. 关闭最后一个标签页 → 自动补空白占位页
     window._tabs.close_tab(0)
     assert window._tabs.count() == 1, "关闭最后标签页后应自动补占位页"
     reborn = window._tabs.current_pair()
     assert reborn is not None and reborn.file_path is None
 
     print("ui_smoke: OK")
-    return 0
+    sys.stdout.flush()
+    # QtWebEngine 在解释器退出阶段析构可能原生崩溃（已知 Qt 问题），
+    # 验证已全部完成，直接退出以跳过 Qt 对象析构
+    os._exit(0)
 
 
 if __name__ == "__main__":

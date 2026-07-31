@@ -97,6 +97,11 @@ class VditorPane(QWebEngineView):
         js = f"setVditorTheme({json.dumps(theme_name)});"
         self.page().runJavaScript(js)
 
+    def scroll_to_heading(self, text: str) -> None:
+        """滚动到指定文本的标题（即时渲染模式的 TOC 跳转）"""
+        js = f"scrollVditorToHeading({json.dumps(text)});"
+        self.page().runJavaScript(js)
+
     def focus_editor(self) -> None:
         """聚焦编辑器"""
         self.page().runJavaScript("focusVditor();")

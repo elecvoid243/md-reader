@@ -23,11 +23,15 @@ from PyQt5.QtWidgets import (
 
 from .editor import MarkdownEditor
 from .preview import PreviewPane
+from .toc_widget import extract_headings
 from .vditor_pane import VditorPane
 
 
 class EditorPreviewPair(QWidget):
     """单个标签页：编辑器 + 预览的分割视图"""
+
+    # 预览不可见时（即时渲染/单栏源码），TOC 需从源码提取更新
+    headings_changed = pyqtSignal(list)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -151,8 +155,10 @@ class EditorPreviewPair(QWidget):
         self._debounce.start(300)  # 300ms 防抖
 
     def _do_render(self) -> None:
-        # 预览不可见时跳过渲染（即时渲染模式 / 单栏源码模式）
+        # 预览不可见时（即时渲染 / 单栏源码）跳过渲染，
+        # 但 TOC 仍需从源码提取更新
         if not self.is_preview_visible():
+            self.headings_changed.emit(extract_headings(self.editor.get_text()))
             return
         text = self.editor.get_text()
         self.preview.render_markdown(text)
