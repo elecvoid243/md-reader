@@ -271,10 +271,10 @@ QStatusBar QLabel {{
     padding: 0 10px;
 }}
 
-/* ═══ 滚动条 ═══ */
+/* ═══ 滚动条（滑槽 + 把手，与扁平分隔条形成区分） ═══ */
 QScrollBar:vertical {{
-    background: transparent;
-    width: 8px;
+    background: {p["inset"]};
+    width: 10px;
     margin: 0;
 }}
 QScrollBar::handle:vertical {{
@@ -290,8 +290,8 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0;
 }}
 QScrollBar:horizontal {{
-    background: transparent;
-    height: 8px;
+    background: {p["inset"]};
+    height: 10px;
 }}
 QScrollBar::handle:horizontal {{
     background: {p["scrollbar"]};
