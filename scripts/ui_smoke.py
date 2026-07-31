@@ -10,9 +10,15 @@ ui_smoke.py — 界面冒烟验证（offscreen 无头模式）
 3. 两套主题均可应用（QSS 构建无 KeyError）
 4. 全部图标可构建（含新增的 open/save/export/theme）
 5. 工具栏包含 4 个常用 action（且均有图标）
-6. 打开示例文件后标签页创建成功
+6. 启动即有一个空白「未命名」占位标签页
+7. 打开示例文件后占位页被替换，仅余 1 个文件标签页
+8. 关闭最后一个标签页后自动补一个空白占位页
 
 用法: python scripts\\ui_smoke.py   (退出码 0 = 通过)
+
+注意: 不使用 QT_QPA_PLATFORM=offscreen —— 本机实测 offscreen 平台上
+QWebEngineView.page()（惰性创建默认 QWebEnginePage/Profile）会原生崩溃
+(0xC0000005)，而 windows 平台正常。脚本从不调用 show()，不会弹出窗口。
 """
 
 from __future__ import annotations
@@ -20,11 +26,8 @@ from __future__ import annotations
 import os
 import sys
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 # QtWebEngineWidgets 必须在 QCoreApplication 创建之前导入（同 main.py）
 import PyQt5.QtWebEngineWidgets  # noqa: F401, E402
-
 from PyQt5.QtWidgets import QApplication  # noqa: E402
 
 # 保证可以 import app 包（脚本位于 scripts/ 下）
@@ -85,15 +88,28 @@ def main() -> int:
         assert not act.icon().isNull(), f"{attr} 缺少图标"
         assert act in bar_actions, f"{attr} 应出现在工具栏"
 
-    # 5. 打开示例文件
+    # 5. 启动即有空白占位标签页
+    assert window._tabs.count() == 1, "启动应有 1 个占位标签页"
+    placeholder = window._tabs.current_pair()
+    assert placeholder is not None and placeholder.file_path is None
+
+    # 6. 打开示例文件：占位页被替换
     sample = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "examples",
-        "README.md",
+        "demo.md",
     )
-    if os.path.isfile(sample):
-        window.open_file(sample)
-        assert window._tabs.count() == 1, "示例文件应打开 1 个标签页"
+    assert os.path.isfile(sample), f"示例文件不存在: {sample}"
+    window.open_file(sample)
+    assert window._tabs.count() == 1, "占位页应被替换，仅余 1 个标签页"
+    pair = window._tabs.current_pair()
+    assert pair is not None and pair.file_path == sample, "当前标签页应为示例文件"
+
+    # 7. 关闭最后一个标签页 → 自动补空白占位页
+    window._tabs.close_tab(0)
+    assert window._tabs.count() == 1, "关闭最后标签页后应自动补占位页"
+    reborn = window._tabs.current_pair()
+    assert reborn is not None and reborn.file_path is None
 
     print("ui_smoke: OK")
     return 0
