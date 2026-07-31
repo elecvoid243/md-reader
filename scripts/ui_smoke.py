@@ -63,6 +63,13 @@ def main() -> int:
     assert dock_area(window._toc_dock) == int(Qt.LeftDockWidgetArea), "TOC 应在左侧"
     assert dock_area(window._file_dock) == int(Qt.RightDockWidgetArea), "文件树应在右侧"
 
+    # 1b. dock 不可移动/不可浮动（仅可关闭，防止误拖为独立窗口）
+    from PyQt5.QtWidgets import QDockWidget as _QDock
+
+    fixed = int(_QDock.DockWidgetClosable)
+    for dock in (window._toc_dock, window._file_dock):
+        assert int(dock.features()) == fixed, "dock 应仅保留 Closable 特性"
+
     # 2. 浅色主题应用（QSS 构建不抛 KeyError；深色模式已移除）
     window._theme_mgr.apply_theme(app)
 
