@@ -70,6 +70,10 @@ class MainWindow(QMainWindow):
             self._theme_mgr.apply_theme(self._theme_mgr.current_theme, app)
             self._apply_editor_theme()
 
+        # 始终保留一个标签页：启动即打开空白的「未命名」页，
+        # 用户直接编辑后保存时会走"另存为"流程创建新文件
+        self._new_tab()
+
     # ──────────────────────────────────────────
     #  窗口基础设置
     # ──────────────────────────────────────────
@@ -382,6 +386,9 @@ class MainWindow(QMainWindow):
         # 标签页切换 → 更新 TOC / 状态栏
         self._tabs.current_pair_changed.connect(self._on_pair_changed)
 
+        # 最后一个标签页关闭后 → 自动补一个空白占位页
+        self._tabs.all_tabs_closed.connect(self._new_tab)
+
         # TOC 点击 → 预览滚动 + 编辑器跳转
         self._toc.heading_clicked.connect(self._on_heading_clicked)
 
@@ -405,6 +412,9 @@ class MainWindow(QMainWindow):
 
         # 新建标签页
         pair = self._tabs.add_tab(file_path=abs_path, content=content)
+
+        # 清理未动过的空白占位页（启动时自动创建的"未命名"）
+        self._drop_placeholder_tab(except_pair=pair)
 
         # 连接 TOC 信号
         pair.preview.toc_updated.connect(self._toc.update_toc)
@@ -482,6 +492,27 @@ class MainWindow(QMainWindow):
         pair = self._tabs.add_tab()
         pair.preview.toc_updated.connect(self._toc.update_toc)
         self._apply_view_mode_to_pair(pair)
+
+    @staticmethod
+    def _is_placeholder(pair) -> bool:
+        """未命名、未修改且内容为空的占位标签页"""
+        return (
+            pair.file_path is None
+            and not pair.is_dirty
+            and not pair.editor.get_text().strip()
+        )
+
+    def _drop_placeholder_tab(self, except_pair) -> None:
+        """清理除 except_pair 外的第一个空白占位页"""
+        for i in range(self._tabs.count()):
+            widget = self._tabs.widget(i)
+            if (
+                isinstance(widget, EditorPreviewPair)
+                and widget is not except_pair
+                and self._is_placeholder(widget)
+            ):
+                self._tabs.discard_pair(widget)
+                return
 
     def _close_current_tab(self) -> None:
         idx = self._tabs.currentIndex()

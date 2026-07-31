@@ -326,6 +326,8 @@ class TabManager(QTabWidget):
     current_pair_changed = pyqtSignal(object)
     # 标签页标题需要更新
     title_changed = pyqtSignal(int, str)
+    # 最后一个标签页被关闭时发出（用于保证始终保留一个标签页）
+    all_tabs_closed = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -431,6 +433,12 @@ class TabManager(QTabWidget):
                 self.removeTab(i)
                 break
         pair.deleteLater()
+        if self.count() == 0:
+            self.all_tabs_closed.emit()
+
+    def discard_pair(self, pair: EditorPreviewPair) -> None:
+        """无提示移除一个标签页（用于清理未动过的空白占位页）"""
+        self._remove_pair(pair)
 
     def current_pair(self) -> EditorPreviewPair | None:
         """获取当前标签页的 EditorPreviewPair"""
