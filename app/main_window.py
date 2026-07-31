@@ -102,6 +102,8 @@ class MainWindow(QMainWindow):
 
         # 左侧停靠：TOC 导航（布局固定：不可拖出为浮动窗口，仅可关闭）
         self._toc = TocWidget()
+        self._toc.setMinimumWidth(160)
+        self._toc.setMaximumWidth(400)
         self._toc_dock = QDockWidget("目录导航", self)
         self._toc_dock.setWidget(self._toc)
         self._toc_dock.setAllowedAreas(Qt.LeftDockWidgetArea)
@@ -110,6 +112,8 @@ class MainWindow(QMainWindow):
 
         # 右侧停靠：文件树（布局固定：不可拖出为浮动窗口，仅可关闭）
         self._file_tree = FileTreeWidget()
+        self._file_tree.setMinimumWidth(180)
+        self._file_tree.setMaximumWidth(480)
         self._file_dock = QDockWidget("文件浏览器", self)
         self._file_dock.setWidget(self._file_tree)
         self._file_dock.setAllowedAreas(Qt.RightDockWidgetArea)

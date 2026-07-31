@@ -236,12 +236,12 @@ QTreeView::branch:closed:has-children:has-siblings {{
     image: none;
 }}
 
-/* ═══ 分割条 ═══ */
+/* ═══ 分割条（编辑器/预览之间，与主窗口分隔条同规格） ═══ */
 QSplitter::handle {{
-    background-color: {p["hairline"]};
+    background-color: {p["border"]};
 }}
-QSplitter::handle:horizontal {{ width: 2px; }}
-QSplitter::handle:vertical {{ height: 2px; }}
+QSplitter::handle:horizontal {{ width: 4px; }}
+QSplitter::handle:vertical {{ height: 4px; }}
 QSplitter::handle:hover {{
     background-color: {p["accent"]};
 }}
@@ -278,7 +278,7 @@ QScrollBar:vertical {{
     margin: 0;
 }}
 QScrollBar::handle:vertical {{
-    background: {p["scrollbar"]};
+    background: {p["border_strong"]};
     border-radius: 4px;
     min-height: 24px;
     margin: 2px;
@@ -294,7 +294,7 @@ QScrollBar:horizontal {{
     height: 10px;
 }}
 QScrollBar::handle:horizontal {{
-    background: {p["scrollbar"]};
+    background: {p["border_strong"]};
     border-radius: 4px;
     min-width: 24px;
     margin: 2px;
