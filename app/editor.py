@@ -10,6 +10,8 @@ editor.py — Markdown 编辑器组件
 
 from __future__ import annotations
 
+import re
+
 from PyQt5.QtCore import QRect, QSize, Qt, pyqtSignal
 from PyQt5.QtGui import (
     QColor,
@@ -62,54 +64,84 @@ class MarkdownHighlighter(QSyntaxHighlighter):
         return fmt
 
     def _setup_rules(self) -> None:
-        import re
-
-        # (正则, 格式) — 顺序决定优先级
+        # 每条规则: (正则, 格式, 触发条件)
+        # 触发条件用于在执行正则前做廉价的前置过滤（不得误杀合法匹配）:
+        #   ("line", chars) — 行首非空白字符必须属于 chars
+        #   ("digit", None) — 行首非空白字符必须是数字
+        #   ("any",  substr) — 行内必须包含子串 substr
         self._rules = [
             # 标题
             (
                 re.compile(r"^#{1,6}\s.*$", re.MULTILINE),
                 self._fmt("#005cc5", bold=True),
+                ("line", "#"),
             ),
             # 粗体
-            (re.compile(r"\*\*[^*]+\*\*"), self._fmt("#24292e", bold=True)),
-            (re.compile(r"__[^_]+__"), self._fmt("#24292e", bold=True)),
+            (re.compile(r"\*\*[^*]+\*\*"), self._fmt("#24292e", bold=True), ("any", "**")),
+            (re.compile(r"__[^_]+__"), self._fmt("#24292e", bold=True), ("any", "__")),
             # 斜体
-            (re.compile(r"\*[^*]+\*"), self._fmt("#24292e", italic=True)),
-            (re.compile(r"_[^_]+_"), self._fmt("#24292e", italic=True)),
+            (re.compile(r"\*[^*]+\*"), self._fmt("#24292e", italic=True), ("any", "*")),
+            (re.compile(r"_[^_]+_"), self._fmt("#24292e", italic=True), ("any", "_")),
             # 行内代码
-            (re.compile(r"`[^`]+`"), self._fmt("#e36209")),
+            (re.compile(r"`[^`]+`"), self._fmt("#e36209"), ("any", "`")),
             # 链接
-            (re.compile(r"\[([^\]]*)\]\([^)]*\)"), self._fmt("#0366d6")),
+            (re.compile(r"\[([^\]]*)\]\([^)]*\)"), self._fmt("#0366d6"), ("any", "](")),
             # 图片
-            (re.compile(r"!\[([^\]]*)\]\([^)]*\)"), self._fmt("#22863a")),
+            (re.compile(r"!\[([^\]]*)\]\([^)]*\)"), self._fmt("#22863a"), ("any", "![")),
             # 引用
-            (re.compile(r"^>\s.*$", re.MULTILINE), self._fmt("#6a737d", italic=True)),
+            (
+                re.compile(r"^>\s.*$", re.MULTILINE),
+                self._fmt("#6a737d", italic=True),
+                ("line", ">"),
+            ),
             # 无序列表标记
-            (re.compile(r"^\s*[-*+]\s", re.MULTILINE), self._fmt("#d73a49", bold=True)),
+            (
+                re.compile(r"^\s*[-*+]\s", re.MULTILINE),
+                self._fmt("#d73a49", bold=True),
+                ("line", "-*+"),
+            ),
             # 有序列表标记
-            (re.compile(r"^\s*\d+\.\s", re.MULTILINE), self._fmt("#d73a49", bold=True)),
+            (
+                re.compile(r"^\s*\d+\.\s", re.MULTILINE),
+                self._fmt("#d73a49", bold=True),
+                ("digit", None),
+            ),
             # 水平线
             (
                 re.compile(r"^(-{3,}|\*{3,}|_{3,})\s*$", re.MULTILINE),
                 self._fmt("#e1e4e8"),
+                ("line", "-*_"),
             ),
             # LaTeX 公式
-            (re.compile(r"\$\$[^$]+\$\$"), self._fmt("#6f42c1")),
-            (re.compile(r"\$[^$]+\$"), self._fmt("#6f42c1")),
+            (re.compile(r"\$\$[^$]+\$\$"), self._fmt("#6f42c1"), ("any", "$$")),
+            (re.compile(r"\$[^$]+\$"), self._fmt("#6f42c1"), ("any", "$")),
         ]
+        # 代码块高亮格式（预建复用，避免每个 block 新建 QTextCharFormat）
+        self._code_fmt = self._fmt("#e36209")
 
     def highlightBlock(self, text: str) -> None:  # noqa: N802
-        for pattern, fmt in self._rules:
-            for match in pattern.finditer(text):
-                start, end = match.span()
-                self.setFormat(start, end - start, fmt)
+        if text:
+            stripped = text.lstrip()
+            first = stripped[0] if stripped else ""
+            for pattern, fmt, (kind, cond) in self._rules:
+                # 前置过滤：纯文本行直接跳过绝大多数正则
+                if kind == "line":
+                    if first not in cond:
+                        continue
+                elif kind == "digit":
+                    if not first.isdigit():
+                        continue
+                elif cond not in text:
+                    continue
+                for match in pattern.finditer(text):
+                    start, end = match.span()
+                    self.setFormat(start, end - start, fmt)
 
         # 多行代码块高亮（``` 围栏）
         self._handle_code_blocks(text)
 
     def _handle_code_blocks(self, text: str) -> None:
-        code_fmt = self._fmt("#e36209")
+        code_fmt = self._code_fmt
         fence_pattern = "```"
 
         # 状态机：previousBlockState 0=正常, 1=代码块内

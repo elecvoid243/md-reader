@@ -10,10 +10,8 @@ from __future__ import annotations
 import os
 
 from PyQt5.QtCore import QSize, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QButtonGroup,
-    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QSplitter,
     QTabWidget,
@@ -115,12 +113,9 @@ class EditorPreviewPair(QWidget):
         self._btn_single.clicked.connect(lambda: self._request_pane(False))
         self._btn_dual.clicked.connect(lambda: self._request_pane(True))
 
-        # 悬浮阴影
-        shadow = QGraphicsDropShadowEffect(self._pane_toggle)
-        shadow.setBlurRadius(14)
-        shadow.setOffset(0, 3)
-        shadow.setColor(QColor(0, 0, 0, 45))
-        self._pane_toggle.setGraphicsEffect(shadow)
+        # 注意：不使用 QGraphicsDropShadowEffect —— GraphicsEffect 会强制该控件
+        # 每次重绘走离屏 pixmap + 模糊，拖累其下方编辑区的重绘效率。
+        # 悬浮感由 QSS 的 1px 边框 + 圆角（theme_manager #pane_toggle）承担。
 
         self._pane_toggle.hide()
 

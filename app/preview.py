@@ -70,6 +70,9 @@ class PreviewPane(QWebEngineView):
         self._pending_markdown: str | None = None
         # 上次已送渲染的文本（相同则跳过，避免标签切换/重复触发时的全量重渲染）
         self._last_rendered: str | None = None
+        # 页面是否已开始加载（懒加载：构造时不加载，首次真正需要渲染时才
+        # 启动 load —— 避免每个新标签页都立即解析 marked/katex/mermaid 等 JS）
+        self._load_started = False
 
         # 转发信号
         self._bridge.toc_updated.connect(self.toc_updated)
@@ -81,11 +84,14 @@ class PreviewPane(QWebEngineView):
         self._channel.registerObject("bridge", self._bridge)
         self.page().setWebChannel(self._channel)
 
-        # 加载预览页面
-        self._load_preview_page()
-
-        # 页面加载完成后标记就绪
+        # 页面加载完成信号（加载本身推迟到 _ensure_loaded）
         self.loadFinished.connect(self._on_load_finished)
+
+    def _ensure_loaded(self) -> None:
+        """按需启动页面加载（幂等）"""
+        if not self._load_started:
+            self._load_started = True
+            self._load_preview_page()
 
     def _load_preview_page(self) -> None:
         url = QUrl.fromLocalFile(_PREVIEW_HTML)
@@ -110,6 +116,7 @@ class PreviewPane(QWebEngineView):
         文本与上次渲染一致时跳过（DOM 中已是对应内容）。
         """
         if not self._ready:
+            self._ensure_loaded()
             self._pending_markdown = text
             return
 
@@ -138,6 +145,7 @@ class PreviewPane(QWebEngineView):
 
     def get_rendered_html(self, callback) -> None:
         """获取渲染后的 HTML（异步，通过 callback 返回）"""
+        self._ensure_loaded()
         self.page().runJavaScript("getRenderedHtml()", callback)
 
     def is_ready(self) -> bool:
