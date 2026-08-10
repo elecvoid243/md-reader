@@ -27,3 +27,6 @@ Desktop.ini
 # PyInstaller
 *.exe
 .codegraph
+
+# Git worktrees
+.worktrees/
