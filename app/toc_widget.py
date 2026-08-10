@@ -71,6 +71,8 @@ class TocWidget(QWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        # 上次渲染的 TOC 数据（相同则跳过重建，避免频繁 clear + expandAll 动画）
+        self._last_toc: list[dict] | None = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -93,6 +95,11 @@ class TocWidget(QWidget):
         Args:
             toc_list: [{level: int, text: str, id: str}, ...]
         """
+        # 数据未变化时直接跳过（每次预览渲染都会回传 TOC，编辑期间绝大多数相同）
+        if toc_list == self._last_toc:
+            return
+        self._last_toc = toc_list
+
         self._tree.clear()
         if not toc_list:
             return
@@ -131,4 +138,5 @@ class TocWidget(QWidget):
             self.heading_clicked.emit(heading_id, level)
 
     def clear_toc(self) -> None:
+        self._last_toc = None
         self._tree.clear()

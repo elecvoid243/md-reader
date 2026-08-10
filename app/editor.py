@@ -179,7 +179,8 @@ class MarkdownEditor(QPlainTextEdit):
         # 基础设置
         self.setTabStopDistance(40)
         self.setLineWrapMode(QPlainTextEdit.WidgetWidth)
-        self.setCenterOnScroll(True)
+        # 注意：不使用 setCenterOnScroll(True) —— 它会让光标每次移动都尝试居中，
+        # 导致打字时整屏视口 + 行号栏持续重绘（编辑卡顿的主要来源之一）
 
     def set_theme_colors(self, colors: dict) -> None:
         """更新主题配色并重绘（行号栏/当前行）"""

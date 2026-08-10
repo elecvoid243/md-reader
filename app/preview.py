@@ -68,6 +68,8 @@ class PreviewPane(QWebEngineView):
         self._bridge = JsBridge()
         self._ready = False
         self._pending_markdown: str | None = None
+        # 上次已送渲染的文本（相同则跳过，避免标签切换/重复触发时的全量重渲染）
+        self._last_rendered: str | None = None
 
         # 转发信号
         self._bridge.toc_updated.connect(self.toc_updated)
@@ -92,6 +94,8 @@ class PreviewPane(QWebEngineView):
     def _on_load_finished(self, ok: bool) -> None:
         if ok:
             self._ready = True
+            # 页面重新加载后 DOM 已重置，渲染缓存同步失效
+            self._last_rendered = None
             # 如果有等待渲染的内容，立即渲染
             if self._pending_markdown is not None:
                 text = self._pending_markdown
@@ -103,10 +107,15 @@ class PreviewPane(QWebEngineView):
         渲染 Markdown 文本
 
         如果页面尚未加载完成，会缓存文本等待就绪后渲染。
+        文本与上次渲染一致时跳过（DOM 中已是对应内容）。
         """
         if not self._ready:
             self._pending_markdown = text
             return
+
+        if text == self._last_rendered:
+            return
+        self._last_rendered = text
 
         # 通过 JS 调用渲染函数（json.dumps 确保字符串安全转义）
         js_code = f"renderMarkdown({json.dumps(text)});"

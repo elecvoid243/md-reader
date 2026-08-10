@@ -287,9 +287,18 @@ class EditorPreviewPair(QWidget):
             self._vditor_pane.get_content(self._apply_vditor_content)
 
     def _apply_vditor_content(self, md: str | None) -> None:
-        if md is not None:
-            # 阻断 textChanged 引发的重复渲染（预览此时不可见）
+        if md is None:
+            return
+        # 内容一致时跳过：避免每次同步都全量 setPlainText
+        # （会清空 undo 栈、触发全文重新高亮、重置光标）
+        if md == self.editor.get_text():
+            return
+        # 阻断 textChanged 引发的脏标记/防抖渲染连锁（预览此时不可见）
+        self.editor.blockSignals(True)
+        try:
             self.editor.set_text(md)
+        finally:
+            self.editor.blockSignals(False)
 
     def get_current_content(self, callback) -> None:
         """
