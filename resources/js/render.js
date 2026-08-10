@@ -43,6 +43,27 @@ if (typeof QWebChannel !== 'undefined') {
     console.log('[render.js] No QWebChannel, standalone mode');
 }
 
+/* ========== 渲染缓存（性能优化：避免每次防抖渲染全量重算） ========== */
+
+// Mermaid SVG 缓存：key = 图表源码，value = 渲染出的 SVG 标记。
+// SVG 内嵌主题色，主题切换时必须清空（见 setTheme）。
+const mermaidSvgCache = new Map();
+const MERMAID_CACHE_MAX = 50;
+
+// highlight.js 结果缓存：key = 语言 + '' + 源码，value = 高亮后的 innerHTML。
+// 高亮产物只含通用 class，主题配色由 CSS 类控制，故主题切换无需清空。
+const hljsCache = new Map();
+const HLJS_CACHE_MAX = 200;
+
+/** 写入缓存并控制容量（Map 按插入序迭代，超出时淘汰最旧条目） */
+function cacheSet(map, maxSize, key, value) {
+    if (map.has(key)) map.delete(key);
+    map.set(key, value);
+    if (map.size > maxSize) {
+        map.delete(map.keys().next().value);
+    }
+}
+
 /* ========== 核心渲染函数 ========== */
 
 /**
@@ -56,6 +77,10 @@ async function renderMarkdown(mdText) {
         notifyRenderFinished();
         return;
     }
+
+    // 记录渲染前的滚动比例，渲染完成后恢复（避免防抖重渲染时预览跳动）
+    const prevScrollRange = document.documentElement.scrollHeight - window.innerHeight;
+    const scrollRatio = prevScrollRange > 0 ? window.scrollY / prevScrollRange : 0;
 
     try {
         // 1. 保护块级公式 $$...$$（避免 marked 的 breaks 在公式内插入 <br>，
@@ -94,33 +119,52 @@ async function renderMarkdown(mdText) {
             errorColor: '#cc0000',
         });
 
-        // 5. 还原并渲染 Mermaid 图表
-        for (let i = 0; i < mermaidBlocks.length; i++) {
-            const placeholder = content.querySelector(`#MERMAID_PLACEHOLDER_${i}`);
-            // 占位符是注释节点，需要遍历查找
-            const walker = document.createTreeWalker(content, NodeFilter.SHOW_COMMENT);
-            let commentNode;
-            while ((commentNode = walker.nextNode())) {
-                if (commentNode.textContent === `MERMAID_PLACEHOLDER_${i}`) {
-                    const div = document.createElement('div');
-                    div.className = 'mermaid';
-                    div.textContent = mermaidBlocks[i];
-                    commentNode.parentNode.replaceChild(div, commentNode);
-                    break;
-                }
-            }
+        // 5. 还原 Mermaid 占位符：单次 TreeWalker 收集全部注释占位符
+        //    （原实现每个块都重新遍历整棵 DOM 树，图多时为 O(n²)）
+        const placeholderNodes = {};
+        const walker = document.createTreeWalker(content, NodeFilter.SHOW_COMMENT);
+        let commentNode;
+        while ((commentNode = walker.nextNode())) {
+            const pm = commentNode.textContent.match(/^MERMAID_PLACEHOLDER_(\d+)$/);
+            if (pm) placeholderNodes[parseInt(pm[1], 10)] = commentNode;
         }
 
-        // 渲染所有 mermaid 图表
-        const mermaidDivs = content.querySelectorAll('.mermaid:not([data-processed])');
-        if (mermaidDivs.length > 0) {
+        // 缓存命中的图直接回填缓存 SVG；未命中的收集起来交给 mermaid 渲染
+        const pendingMermaid = []; // [{node, source}]
+        for (let i = 0; i < mermaidBlocks.length; i++) {
+            const holder = placeholderNodes[i];
+            if (!holder) continue;
+            const source = mermaidBlocks[i];
+            const div = document.createElement('div');
+            const cachedSvg = mermaidSvgCache.get(source);
+            if (cachedSvg !== undefined) {
+                div.className = 'mermaid';
+                div.setAttribute('data-processed', 'true');
+                div.innerHTML = cachedSvg;
+            } else {
+                div.className = 'mermaid';
+                div.textContent = source;
+                pendingMermaid.push({ node: div, source: source });
+            }
+            holder.parentNode.replaceChild(div, holder);
+        }
+
+        // 仅渲染未命中缓存的图表，成功后写入缓存（改一个字不再重画所有图）
+        if (pendingMermaid.length > 0) {
             try {
-                await mermaid.run({ nodes: mermaidDivs });
+                await mermaid.run({
+                    nodes: pendingMermaid.map(function (p) { return p.node; }),
+                });
+                pendingMermaid.forEach(function (p) {
+                    if (p.node.querySelector('svg')) {
+                        cacheSet(mermaidSvgCache, MERMAID_CACHE_MAX, p.source, p.node.innerHTML);
+                    }
+                });
             } catch (e) {
                 console.warn('[render.js] Mermaid render error:', e);
-                mermaidDivs.forEach(function (div) {
-                    if (!div.querySelector('svg')) {
-                        div.innerHTML =
+                pendingMermaid.forEach(function (p) {
+                    if (!p.node.querySelector('svg')) {
+                        p.node.innerHTML =
                             '<div class="mermaid-error">⚠ Mermaid 渲染失败: ' +
                             escapeHtml(e.message || String(e)) + '</div>';
                     }
@@ -128,10 +172,20 @@ async function renderMarkdown(mdText) {
             }
         }
 
-        // 6. highlight.js 代码高亮（跳过 mermaid）
+        // 6. highlight.js 代码高亮（跳过 mermaid；结果按 语言+源码 缓存，
+        //    未变化的代码块直接回填缓存，避免每次渲染全文重算）
         content.querySelectorAll('pre code').forEach(function (block) {
-            if (!block.classList.contains('language-mermaid')) {
+            if (block.classList.contains('language-mermaid')) return;
+            const langMatch = block.className.match(/language-([\w+-]+)/);
+            const cacheKey = (langMatch ? langMatch[1] : '') + '' + block.textContent;
+            const cachedHtml = hljsCache.get(cacheKey);
+            if (cachedHtml !== undefined) {
+                block.innerHTML = cachedHtml;
+                block.classList.add('hljs');
+                block.dataset.highlighted = 'true';
+            } else {
                 hljs.highlightElement(block);
+                cacheSet(hljsCache, HLJS_CACHE_MAX, cacheKey, block.innerHTML);
             }
         });
 
@@ -143,6 +197,13 @@ async function renderMarkdown(mdText) {
 
         // 8. 提取 TOC 并回传 Python
         extractAndSendTOC(content);
+
+        // 8.5 恢复渲染前的滚动比例（innerHTML 重建 + mermaid 渲染后内容高度
+        //     可能变化，按比例恢复保持阅读位置稳定，避免编辑时预览跳动）
+        const newScrollRange = document.documentElement.scrollHeight - window.innerHeight;
+        if (newScrollRange > 0 && scrollRatio > 0) {
+            window.scrollTo(0, Math.round(newScrollRange * scrollRatio));
+        }
 
         // 9. 通知渲染完成
         notifyRenderFinished();
@@ -269,6 +330,10 @@ function notifyRenderFinished() {
  * @param {string} themeName - 'light' 或 'dark'
  */
 function setTheme(themeName) {
+    // Mermaid SVG 内嵌主题色，主题切换后缓存全部失效
+    // （hljs 缓存产物只含通用 class，配色由 CSS 控制，无需清空）
+    mermaidSvgCache.clear();
+
     const themeLink = document.getElementById('theme-stylesheet');
     const hljsLight = document.getElementById('hljs-light');
     const hljsDark = document.getElementById('hljs-dark');
