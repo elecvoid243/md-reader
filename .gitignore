@@ -30,3 +30,6 @@ Desktop.ini
 
 # Git worktrees
 .worktrees/
+
+# Exapmle
+examples/
