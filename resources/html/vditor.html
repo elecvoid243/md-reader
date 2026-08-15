@@ -147,7 +147,16 @@
                 },
                 hljs: { style: 'github', lineNumber: false },
             },
-            hint: { emoji: {} },
+            hint: {
+                emoji: {
+                    '+1': '👍', '-1': '👎',
+                    smile: '😄', laugh: '😆', wink: '😉', heart: '❤️',
+                    sob: '😭', cry: '😢', think: '🤔', eyes: '👀',
+                    ok: '👌', clap: '👏', pray: '🙏', muscle: '💪',
+                    fire: '🔥', star: '⭐', check: '✅', cross: '❌',
+                    warn: '⚠️', rocket: '🚀', tada: '🎉'
+                }
+            },
             after: function () {
                 window.vditorReady = true;
                 // 滚动容器是全宽的 .vditor-ir；其滚动不会触发 Vditor 在
@@ -173,6 +182,71 @@
                 if (window.bridge) window.bridge.onInput(text || '');
             },
         });
+
+        /* ===== 工具栏样式按钮：应用样式后保持选区 ===== */
+        (function () {
+            var INLINE_STYLES = ['bold', 'italic', 'strike', 'inline-code'];
+            var TAG_TO_TYPE = {
+                STRONG: 'bold',
+                EM: 'italic',
+                S: 'strike',
+                CODE: 'inline-code'
+            };
+            document.addEventListener('click', function (event) {
+                var target = event.target;
+                var btn = target && target.closest
+                    ? target.closest('.vditor-toolbar__item button[data-type]')
+                    : null;
+                if (!btn) return;
+                var type = btn.getAttribute('data-type');
+                if (INLINE_STYLES.indexOf(type) === -1) return;
+
+                var selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                    return;
+                }
+
+                // Vditor 处理完成后，插入的样式节点通常位于当前光标左侧。
+                // 延迟到本次 click 处理结束后，把该样式节点的内容重新选中，
+                // 并同步按钮的 current 状态，保证第二次点击可以取消样式。
+                setTimeout(function () {
+                    var current = window.getSelection();
+                    if (!current || current.rangeCount === 0) return;
+
+                    var anchor = current.anchorNode;
+                    var element = anchor && anchor.nodeType === 1
+                        ? anchor
+                        : (anchor && anchor.parentElement);
+                    if (!element) return;
+
+                    var styledElement = null;
+                    if (TAG_TO_TYPE[element.tagName]) {
+                        styledElement = element;
+                    } else if (
+                        element.previousElementSibling
+                        && TAG_TO_TYPE[element.previousElementSibling.tagName]
+                    ) {
+                        styledElement = element.previousElementSibling;
+                    }
+                    if (!styledElement) return;
+
+                    var range = document.createRange();
+                    range.selectNodeContents(styledElement);
+                    current.removeAllRanges();
+                    current.addRange(range);
+
+                    var appliedType = TAG_TO_TYPE[styledElement.tagName];
+                    if (appliedType) {
+                        var actionBtn = document.querySelector(
+                            '.vditor-toolbar__item button[data-type="' + appliedType + '"]'
+                        );
+                        if (actionBtn) {
+                            actionBtn.classList.add('vditor-menu--current');
+                        }
+                    }
+                }, 0);
+            }, true);
+        })();
 
         /* ===== 供 Python 调用的接口 ===== */
 

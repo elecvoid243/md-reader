@@ -48,6 +48,12 @@
     border-radius: 5px;
 }
 
+/* Vditor 高度配置为百分比时会给 emoji 面板算出 NaNpx，
+   这里提供稳定的最大高度 */
+.vditor-emojis {
+    max-height: 320px;
+}
+
 /* ══════════════ 编辑区背景 ══════════════ */
 
 /* 滚动容器放在全宽 .vditor-ir 上：滚动条位于视图最右侧，
