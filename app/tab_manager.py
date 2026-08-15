@@ -61,10 +61,12 @@ class EditorPreviewPair(QWidget):
         self._debounce.setSingleShot(True)
         self._debounce.timeout.connect(self._do_render)
 
-        # Vditor → 编辑器 防抖同步定时器（即时渲染模式下保持编辑器为最新数据源）
+        # Vditor → 编辑器 防抖同步定时器（Vditor 已自带 500ms 级防抖，
+        # 这里只做最后一次合并，避免瞬时多次 setPlainText）
         self._vditor_sync_timer = QTimer()
         self._vditor_sync_timer.setSingleShot(True)
         self._vditor_sync_timer.timeout.connect(self._sync_vditor_to_editor)
+        self._pending_vditor_text: str | None = None
 
         # 编辑区文本变化 → 触发防抖渲染
         self.editor.textChanged.connect(self._on_text_changed)
@@ -169,7 +171,9 @@ class EditorPreviewPair(QWidget):
         QTimer.singleShot(100, self._release_sync_lock)
 
     def _sync_editor_scroll(self, percent: float) -> None:
-        if self._sync_lock:
+        # 阅读模式下编辑器隐藏，跳过无谓的滚动条更新，
+        # 减少滚动过程中 QWebChannel 回传后的 Python/Qt 开销
+        if self._sync_lock or self.view_mode == "reading":
             return
         self._sync_lock = True
         self.editor.set_scroll_percent(percent)
@@ -268,18 +272,26 @@ class EditorPreviewPair(QWidget):
             self._vditor_pane.input_changed.connect(self._on_vditor_input)
 
     def _hide_vditor(self) -> None:
+        self._vditor_sync_timer.stop()
+        self._pending_vditor_text = None
         if self._vditor_pane is not None:
             self._vditor_pane.hide()
 
-    def _on_vditor_input(self) -> None:
-        """Vditor 中用户输入 → 标记脏状态 + 启动防抖同步"""
+    def _on_vditor_input(self, text: str) -> None:
+        """Vditor 中用户输入 → 标记脏状态 + 缓存最新 Markdown"""
         self.is_dirty = True
-        self._vditor_sync_timer.start(600)
+        self._pending_vditor_text = text
+        # 只做本地合并，不再从这里发起第二次 getVditorContent()
+        self._vditor_sync_timer.start(150)
 
     def _sync_vditor_to_editor(self) -> None:
-        """把 Vditor 内容同步回编辑器（保持编辑器为最新数据源）"""
-        if self._vditor_pane is not None and self.view_mode == "instant":
-            self._vditor_pane.get_content(self._apply_vditor_content)
+        """把 Vditor 最近一次 input 回调给出的 Markdown 同步回编辑器"""
+        if self._vditor_pane is None or self.view_mode != "instant":
+            return
+        text = self._pending_vditor_text
+        self._pending_vditor_text = None
+        if text is not None:
+            self._apply_vditor_content(text)
 
     def _apply_vditor_content(self, md: str | None) -> None:
         if md is None:

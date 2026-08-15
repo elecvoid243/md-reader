@@ -6,7 +6,8 @@ vditor_pane.py — Vditor 即时渲染编辑面板
 
 设计要点：
 - Vditor 异步加载（lute/katex/mermaid 懒加载），用 _ready 标志 + 待处理内容队列处理
-- 内容变更通过 onInput 通知 Python（用于脏状态标记），取值按需拉取
+- Vditor 的 input 回调携带最新 Markdown 文本，Python 直接复用，避免二次全量取值；
+  切换模式 / 保存等需要精确内容的场景仍按需拉取
 """
 
 from __future__ import annotations
@@ -29,22 +30,22 @@ class VditorBridge(QObject):
     """Python ↔ Vditor(JS) 通信桥"""
 
     ready = pyqtSignal()  # Vditor 初始化完成
-    input_changed = pyqtSignal()  # 内容发生变化（用户输入）
+    input_changed = pyqtSignal(str)  # 内容发生变化（用户输入，携带最新 Markdown）
 
     @pyqtSlot()
     def onReady(self) -> None:  # noqa: N802
         self.ready.emit()
 
-    @pyqtSlot()
-    def onInput(self) -> None:  # noqa: N802
-        self.input_changed.emit()
+    @pyqtSlot(str)
+    def onInput(self, text: str) -> None:  # noqa: N802
+        self.input_changed.emit(text)
 
 
 class VditorPane(QWebEngineView):
     """Vditor 即时渲染面板"""
 
     ready = pyqtSignal()
-    input_changed = pyqtSignal()
+    input_changed = pyqtSignal(str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)

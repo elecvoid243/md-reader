@@ -335,6 +335,7 @@ body {
     background: var(--bg-inset);
     border: 1px solid var(--hairline);
     border-radius: 10px;
+    contain: layout paint;
 }
 
 .markdown-body .mermaid svg { max-width: 100%; height: auto; }

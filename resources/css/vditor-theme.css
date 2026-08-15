@@ -148,6 +148,53 @@
     background: transparent !important;
 }
 
+/* Mermaid 渲染完成后，代码元素里是 SVG。SVG 会继承 IR 根节点 pre 的
+   white-space: pre / word-break: break-word，导致 foreignObject 内的
+   文字按 pre 规则换行，最终被 SVG 标签的固定宽高裁掉。
+   渲染完成后切回普通排版。 */
+.vditor-ir__preview[data-render="1"] {
+    overflow: visible !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    word-wrap: normal !important;
+}
+
+.vditor-reset .language-mermaid[data-processed="true"] {
+    display: block !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    word-wrap: normal !important;
+    background: transparent !important;
+}
+
+/* 与阅读模式 .markdown-body .mermaid 使用同一套卡片规格，
+   让两种模式下的图表宽度、留白、背景保持一致 */
+.vditor-reset pre.vditor-mermaid-preview {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+.vditor-mermaid-preview > .language-mermaid[data-processed="true"] {
+    margin: 1.8em 0;
+    padding: 20px;
+    text-align: center;
+    background: var(--bg-inset);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    box-sizing: border-box;
+    contain: layout paint;
+}
+
+.vditor-reset .language-mermaid[data-processed="true"] svg {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100%;
+}
+
 /* ══════════════ 引用 ══════════════ */
 
 .vditor-reset blockquote {

@@ -138,7 +138,7 @@
             toolbar: toolbar,
             toolbarConfig: { pin: true },  // 页面滚动时工具栏吸附在顶部
             cache: { enable: false },      // 禁用本地缓存（由 Python 管理文件）
-            undoDelay: 500,
+            undoDelay: 800,
             placeholder: '开始写作…（支持 Markdown 语法即时渲染）',
             preview: {
                 delay: 300,
@@ -159,9 +159,10 @@
                 }
                 if (window.bridge) window.bridge.onReady();
             },
-            input: function () {
-                // 内容变化通知（用于脏状态标记）
-                if (window.bridge) window.bridge.onInput();
+            input: function (text) {
+                // Vditor 已在内部完成一次全文档 IRDOM → Markdown，
+                // 直接复用该结果，避免 Python 再次 getVditorContent()
+                if (window.bridge) window.bridge.onInput(text || '');
             },
         });
 

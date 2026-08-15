@@ -3602,29 +3602,11 @@ var mermaidRender = function (element, cdn, theme) {
     }
     (0,_util_addScript__WEBPACK_IMPORTED_MODULE_2__/* .addScript */ .G)("".concat(cdn, "/dist/js/mermaid/mermaid.min.js?v=10.6.1"), "vditorMermaidScript").then(function () {
         var config = {
-            securityLevel: "loose",
-            altFontFamily: "sans-serif",
-            fontFamily: "sans-serif",
             startOnLoad: false,
-            flowchart: {
-                htmlLabels: true,
-                useMaxWidth: !0
-            },
-            sequence: {
-                useMaxWidth: true,
-                diagramMarginX: 8,
-                diagramMarginY: 8,
-                boxMargin: 8,
-                showSequenceNumbers: true // Mermaid 时序图增加序号 https://github.com/siyuan-note/siyuan/pull/6992 https://mermaid.js.org/syntax/sequenceDiagram.html#sequencenumbers
-            },
-            gantt: {
-                leftPadding: 75,
-                rightPadding: 20
-            }
+            theme: theme === "dark" ? "dark" : "default",
+            securityLevel: "loose",
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif'
         };
-        if (theme === "dark") {
-            config.theme = "dark";
-        }
         mermaid.initialize(config);
         mermaidElements.forEach(function (item) { return __awaiter(void 0, void 0, void 0, function () {
             var code, id, mermaidData, e_1, errorElement;
@@ -5198,6 +5180,7 @@ var processCodeRender = function (previewPanel, vditor) {
         (0,abcRender/* abcRender */.Q)(previewPanel, vditor.options.cdn);
     }
     else if (language === "mermaid") {
+        previewPanel.classList.add("vditor-mermaid-preview");
         (0,mermaidRender/* mermaidRender */.i)(previewPanel, vditor.options.cdn, vditor.options.theme);
     }
     else if (language === "smiles") {
