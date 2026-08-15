@@ -1005,7 +1005,15 @@ var mermaidRender = function (element, cdn, theme) {
             startOnLoad: false,
             theme: theme === "dark" ? "dark" : "default",
             securityLevel: "loose",
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif'
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+            flowchart: {
+                htmlLabels: false,
+                useMaxWidth: true
+            },
+            sequence: {
+                textPlacement: "old",
+                useMaxWidth: true
+            }
         };
         mermaid.initialize(config);
         mermaidElements.forEach(function (item) { return __awaiter(void 0, void 0, void 0, function () {

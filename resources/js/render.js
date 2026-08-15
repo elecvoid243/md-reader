@@ -19,11 +19,21 @@ marked.setOptions({
 });
 
 // 配置 mermaid（延迟渲染，由我们手动触发）
+// htmlLabels 关闭 + sequence 使用 SVG 文本：可被 QtSvg 等矢量渲染器识别，
+// 也便于无 Chrome 时用 PyQt5 生成 PDF。
 mermaid.initialize({
     startOnLoad: false,
     theme: 'default',
     securityLevel: 'loose',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+    flowchart: {
+        htmlLabels: false,
+        useMaxWidth: true,
+    },
+    sequence: {
+        textPlacement: 'old',
+        useMaxWidth: true,
+    },
 });
 
 // QWebChannel 桥接对象
