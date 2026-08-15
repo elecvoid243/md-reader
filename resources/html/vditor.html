@@ -9,14 +9,95 @@
     <link rel="stylesheet" href="../css/theme-light.css" id="theme-stylesheet">
     <link rel="stylesheet" href="../css/vditor-theme.css">
     <style>
-        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-        #vditor { height: 100vh; border: none; }
+        html, body { margin: 0; padding: 0; min-height: 100%; overflow-x: hidden; }
+        #vditor { min-height: 100vh; border: none; }
     </style>
 </head>
 <body>
     <div id="vditor"></div>
 
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <!-- 兼容性 polyfill：Qt 5.15 内嵌 Chromium 83 缺少 Chrome 85+ 的 API，
+         Vditor 动态加载的 mermaid v10 依赖它们，必须先于第三方库注入。 -->
+    <script>
+        // structuredClone (Chrome 98)
+        if (typeof globalThis.structuredClone !== 'function') {
+            globalThis.structuredClone = function (value) {
+                if (value === null || typeof value !== 'object') return value;
+                if (value instanceof Date) return new Date(value.getTime());
+                if (value instanceof RegExp) return new RegExp(value.source, value.flags);
+                if (Array.isArray(value)) {
+                    return value.map(function (v) { return globalThis.structuredClone(v); });
+                }
+                if (value instanceof Map) {
+                    var m = new Map();
+                    value.forEach(function (v, k) {
+                        m.set(globalThis.structuredClone(k), globalThis.structuredClone(v));
+                    });
+                    return m;
+                }
+                if (value instanceof Set) {
+                    var s = new Set();
+                    value.forEach(function (v) { s.add(globalThis.structuredClone(v)); });
+                    return s;
+                }
+                var result = {};
+                for (var key in value) {
+                    if (Object.prototype.hasOwnProperty.call(value, key)) {
+                        result[key] = globalThis.structuredClone(value[key]);
+                    }
+                }
+                return result;
+            };
+        }
+        // Object.hasOwn (Chrome 93)
+        if (!Object.hasOwn) {
+            Object.hasOwn = function (obj, prop) {
+                return Object.prototype.hasOwnProperty.call(obj, prop);
+            };
+        }
+        // String.prototype.replaceAll (Chrome 85)
+        if (!String.prototype.replaceAll) {
+            String.prototype.replaceAll = function (search, replacement) {
+                if (typeof search === 'string') {
+                    return this.split(search).join(replacement);
+                }
+                return this.replace(search, replacement);
+            };
+        }
+        // Array.prototype.at / String.prototype.at (Chrome 92)
+        if (!Array.prototype.at) {
+            Array.prototype.at = function (n) {
+                n = Math.trunc(n) || 0;
+                if (n < 0) n += this.length;
+                return (n < 0 || n >= this.length) ? undefined : this[n];
+            };
+        }
+        if (!String.prototype.at) {
+            String.prototype.at = function (n) {
+                n = Math.trunc(n) || 0;
+                if (n < 0) n += this.length;
+                return (n < 0 || n >= this.length) ? undefined : this[n];
+            };
+        }
+        // Array.prototype.findLast / findLastIndex (Chrome 97)
+        if (!Array.prototype.findLast) {
+            Array.prototype.findLast = function (cb, thisArg) {
+                for (var i = this.length - 1; i >= 0; i--) {
+                    if (cb.call(thisArg, this[i], i, this)) return this[i];
+                }
+                return undefined;
+            };
+        }
+        if (!Array.prototype.findLastIndex) {
+            Array.prototype.findLastIndex = function (cb, thisArg) {
+                for (var i = this.length - 1; i >= 0; i--) {
+                    if (cb.call(thisArg, this[i], i, this)) return i;
+                }
+                return -1;
+            };
+        }
+    </script>
     <script src="../vditor/dist/index.min.js"></script>
     <script>
         /* ===== Python ↔ JS 桥接 ===== */
@@ -25,10 +106,18 @@
         window.vditorReady = false;
         var pendingContent = null;
 
-        if (typeof QWebChannel !== 'undefined') {
-            new QWebChannel(qt.webChannelTransport, function (channel) {
-                window.bridge = channel.objects.bridge;
-            });
+        try {
+            if (
+                typeof QWebChannel !== 'undefined'
+                && typeof qt !== 'undefined'
+                && qt.webChannelTransport
+            ) {
+                new QWebChannel(qt.webChannelTransport, function (channel) {
+                    window.bridge = channel.objects.bridge;
+                });
+            }
+        } catch (e) {
+            window.bridge = null;
         }
 
         /* ===== 工具栏配置（精简实用） ===== */
@@ -45,8 +134,9 @@
         window.vditor = new Vditor('vditor', {
             cdn: '../vditor',
             mode: 'ir',                    // 即时渲染：Typora 式体验
-            height: '100%',
+            height: 'auto',                // 页面滚动，与阅读模式一致
             toolbar: toolbar,
+            toolbarConfig: { pin: true },  // 页面滚动时工具栏吸附在顶部
             cache: { enable: false },      // 禁用本地缓存（由 Python 管理文件）
             undoDelay: 500,
             placeholder: '开始写作…（支持 Markdown 语法即时渲染）',

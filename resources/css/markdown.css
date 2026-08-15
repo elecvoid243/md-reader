@@ -42,7 +42,7 @@ body {
 /* ══════════════ 纸面容器 ══════════════ */
 
 #content {
-    max-width: 880px;
+    width: 80%;
     margin: 36px auto 90px;
     padding: 64px 72px 88px;
     min-height: calc(100vh - 130px);
@@ -55,6 +55,7 @@ body {
 
 @media (max-width: 960px) {
     #content {
+        width: 100%;
         margin: 0;
         padding: 40px 28px 60px;
         border-radius: 0;
@@ -400,6 +401,7 @@ body {
 @media print {
     body { background: #fff; }
     #content {
+        width: 100%;
         max-width: 100%;
         margin: 0;
         padding: 0;

@@ -30,17 +30,27 @@ mermaid.initialize({
 window.bridge = null;
 window.jsReady = false;
 
-// 初始化 QWebChannel
-if (typeof QWebChannel !== 'undefined') {
-    new QWebChannel(qt.webChannelTransport, function (channel) {
-        window.bridge = channel.objects.bridge;
+// 初始化 QWebChannel（qt.webChannelTransport 缺失或连接失败时降级为
+// standalone，避免顶层抛错中断后续 const 初始化，导致 renderMarkdown 进入 TDZ 错误）
+try {
+    if (
+        typeof QWebChannel !== 'undefined'
+        && typeof qt !== 'undefined'
+        && qt.webChannelTransport
+    ) {
+        new QWebChannel(qt.webChannelTransport, function (channel) {
+            window.bridge = channel.objects.bridge;
+            window.jsReady = true;
+            console.log('[render.js] QWebChannel connected');
+        });
+    } else {
+        // 无 QWebChannel 时（如浏览器调试），标记为就绪
         window.jsReady = true;
-        console.log('[render.js] QWebChannel connected');
-    });
-} else {
-    // 无 QWebChannel 时（如浏览器调试），标记为就绪
+        console.log('[render.js] No QWebChannel, standalone mode');
+    }
+} catch (e) {
     window.jsReady = true;
-    console.log('[render.js] No QWebChannel, standalone mode');
+    console.warn('[render.js] QWebChannel init failed, standalone mode:', e);
 }
 
 /* ========== 渲染缓存（性能优化：避免每次防抖渲染全量重算） ========== */
@@ -93,19 +103,20 @@ async function renderMarkdown(mdText) {
         // 2.5 还原块级公式（HTML 转义后回填，保持 $$...$$ 位于单一文本节点）
         html = restoreBlockMath(html, mathGuard.store);
 
-        // 3. 预处理：保护 mermaid 代码块（避免被 KaTeX 误处理）
-        const mermaidBlocks = [];
-        html = html.replace(
-            /<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/gi,
-            function (match, code) {
-                const idx = mermaidBlocks.length;
-                mermaidBlocks.push(decodeHtml(code));
-                return `<!--MERMAID_PLACEHOLDER_${idx}-->`;
-            }
-        );
-
         // 3. 设置 HTML 内容
         content.innerHTML = html;
+
+        // 3.5 预处理：保护 mermaid 代码块（直接基于 DOM 提取，避免依赖
+        //     marked 序列化 HTML 的固定格式；同时避免被 KaTeX 误处理）
+        const mermaidBlocks = [];
+        content.querySelectorAll('pre code.language-mermaid').forEach(function (code) {
+            const pre = code.parentElement;
+            const holder = document.createComment(
+                'MERMAID_PLACEHOLDER_' + mermaidBlocks.length
+            );
+            mermaidBlocks.push(code.textContent);
+            pre.parentNode.replaceChild(holder, pre);
+        });
 
         // 4. KaTeX 公式渲染
         renderMathInElement(content, {
@@ -236,13 +247,6 @@ function addCodeBlockHeaders(container) {
             }
         }
     });
-}
-
-/** HTML 实体解码 */
-function decodeHtml(text) {
-    const el = document.createElement('textarea');
-    el.innerHTML = text;
-    return el.value;
 }
 
 /** HTML 转义 */

@@ -1000,7 +1000,7 @@ var mermaidRender = function (element, cdn, theme) {
     if (mermaidElements.length === 0) {
         return;
     }
-    (0,_util_addScript__WEBPACK_IMPORTED_MODULE_2__/* .addScript */ .G)("".concat(cdn, "/dist/js/mermaid/mermaid.min.js?v=11.6.0"), "vditorMermaidScript").then(function () {
+    (0,_util_addScript__WEBPACK_IMPORTED_MODULE_2__/* .addScript */ .G)("".concat(cdn, "/dist/js/mermaid/mermaid.min.js?v=10.6.1"), "vditorMermaidScript").then(function () {
         var config = {
             securityLevel: "loose",
             altFontFamily: "sans-serif",
