@@ -397,6 +397,14 @@ body {
     border: 2px solid transparent;
 }
 
+/* 阅读模式由原生 Qt 滚动条代理时，隐藏网页自身的纵向滚动条，
+   但保留滚轮/脚本滚动能力 */
+html.native-scroll-proxy::-webkit-scrollbar,
+body.native-scroll-proxy::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
 /* ══════════════ 打印 ══════════════ */
 
 @media print {

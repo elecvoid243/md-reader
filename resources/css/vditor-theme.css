@@ -11,8 +11,7 @@
    使即时渲染两侧露出与阅读模式一致的桌面层次。 */
 
 .vditor {
-    height: auto !important;
-    min-height: 100vh;
+    height: 100% !important;
     background: transparent !important;
     border: none !important;
     border-radius: 0 !important;
@@ -51,10 +50,14 @@
 
 /* ══════════════ 编辑区背景 ══════════════ */
 
+/* 滚动容器放在全宽 .vditor-ir 上：滚动条位于视图最右侧，
+   但不需要文档级滚动和 sticky 工具栏，滚动开销更低。 */
 .vditor-ir {
     background: transparent !important;
     color: var(--ink) !important;
     padding: 28px 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
 }
 
 /* 纸面卡片：居中悬浮于桌面之上，与阅读模式 #content 同构。
@@ -87,14 +90,9 @@
     }
 }
 
-/* 全屏模式是固定高度容器，恢复 Vditor 内部滚动，避免内容超出屏幕无法滚动 */
+/* 全屏模式保持固定高度；滚动仍由全宽 .vditor-ir 承担 */
 .vditor--fullscreen {
     height: 100vh !important;
-}
-.vditor--fullscreen .vditor-ir > pre.vditor-reset {
-    height: 100% !important;
-    min-height: 0;
-    overflow: auto !important;
 }
 
 /* ══════════════ 排版：标题（衬线 × 重墨） ══════════════ */

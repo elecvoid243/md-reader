@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="../css/theme-light.css" id="theme-stylesheet">
     <link rel="stylesheet" href="../css/vditor-theme.css">
     <style>
-        html, body { margin: 0; padding: 0; min-height: 100%; overflow-x: hidden; }
-        #vditor { min-height: 100vh; border: none; }
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        #vditor { height: 100vh; border: none; }
     </style>
 </head>
 <body>
@@ -120,23 +120,21 @@
             window.bridge = null;
         }
 
-        /* ===== 工具栏配置（精简实用） ===== */
+        /* ===== 工具栏配置（精简实用；模式切换/大纲/全屏由应用自身提供） ===== */
         var toolbar = [
             'emoji', 'headings', 'bold', 'italic', 'strike', '|',
             'list', 'ordered-list', 'check', '|',
             'quote', 'code', 'inline-code', '|',
             'link', 'table', '|',
-            'undo', 'redo', '|',
-            'edit-mode', 'outline', 'fullscreen'
+            'undo', 'redo'
         ];
 
         /* ===== 初始化 Vditor（即时渲染 IR 模式） ===== */
         window.vditor = new Vditor('vditor', {
             cdn: '../vditor',
             mode: 'ir',                    // 即时渲染：Typora 式体验
-            height: 'auto',                // 页面滚动，与阅读模式一致
+            height: '100%',
             toolbar: toolbar,
-            toolbarConfig: { pin: true },  // 页面滚动时工具栏吸附在顶部
             cache: { enable: false },      // 禁用本地缓存（由 Python 管理文件）
             undoDelay: 800,
             placeholder: '开始写作…（支持 Markdown 语法即时渲染）',
@@ -152,6 +150,16 @@
             hint: { emoji: {} },
             after: function () {
                 window.vditorReady = true;
+                // 滚动容器是全宽的 .vditor-ir；其滚动不会触发 Vditor 在
+                // IR pre 上的 scroll 监听，这里手动隐藏悬浮提示。
+                var irScroll = document.querySelector('.vditor-ir');
+                if (irScroll && !irScroll.__mdScrollBound) {
+                    irScroll.__mdScrollBound = true;
+                    irScroll.addEventListener('scroll', function () {
+                        var hint = document.querySelector('.vditor-hint');
+                        if (hint) hint.style.display = 'none';
+                    });
+                }
                 // 应用待处理内容
                 if (pendingContent !== null) {
                     window.vditor.setValue(pendingContent);

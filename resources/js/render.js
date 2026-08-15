@@ -218,12 +218,14 @@ async function renderMarkdown(mdText) {
 
         // 9. 通知渲染完成
         notifyRenderFinished();
+        reportScrollMetrics();
 
     } catch (err) {
         console.error('[render.js] Render error:', err);
         content.innerHTML =
             '<div class="render-error">渲染出错: ' + escapeHtml(err.message) + '</div>';
         notifyRenderFinished();
+        reportScrollMetrics();
     }
 }
 
@@ -360,6 +362,8 @@ function setTheme(themeName) {
 
 /* ========== 滚动同步 ========== */
 
+window.nativeScrollProxyEnabled = false;
+
 /** 设置预览区滚动比例（由 Python 端调用） */
 function setScrollPercent(percent) {
     const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
@@ -376,17 +380,54 @@ function scrollToHeading(headingId) {
     }
 }
 
-// 监听预览区滚动，回传比例给 Python（用于反向同步）
+/** 设置文档滚动位置（原生 Qt 滚动条代理使用） */
+function setScrollTop(top) {
+    window.scrollTo(0, top);
+}
+
+/** 读取文档滚动尺寸 */
+function getScrollMetrics() {
+    return {
+        top: window.scrollY,
+        height: document.documentElement.scrollHeight,
+        client: window.innerHeight,
+    };
+}
+
+/** 启用/关闭原生滚动条代理：隐藏网页滚动条，由 Qt 滚动条驱动 */
+function setNativeScrollProxy(enabled) {
+    window.nativeScrollProxyEnabled = !!enabled;
+    document.documentElement.classList.toggle('native-scroll-proxy', !!enabled);
+    document.body.classList.toggle('native-scroll-proxy', !!enabled);
+    reportScrollMetrics();
+}
+
+/** 把滚动尺寸回传给 Python，用于更新原生滚动条 range/value */
+function reportScrollMetrics() {
+    if (!window.nativeScrollProxyEnabled || !window.bridge) return;
+    const metrics = getScrollMetrics();
+    window.bridge.onScrollMetrics(metrics.top, metrics.height, metrics.client);
+}
+
+// 监听预览区滚动：原生代理开启时只回报量程；编辑双栏时回报比例用于反向同步
 let scrollTimer = null;
 window.addEventListener('scroll', function () {
     if (scrollTimer) clearTimeout(scrollTimer);
     scrollTimer = setTimeout(function () {
+        if (window.nativeScrollProxyEnabled) {
+            reportScrollMetrics();
+            return;
+        }
         const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
         if (scrollHeight > 0 && window.bridge) {
             const percent = window.scrollY / scrollHeight;
             window.bridge.onScroll(percent);
         }
     }, 50);
+});
+
+window.addEventListener('resize', function () {
+    if (window.nativeScrollProxyEnabled) reportScrollMetrics();
 });
 
 /* ========== 获取渲染后的 HTML（用于导出） ========== */

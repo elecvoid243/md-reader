@@ -13,6 +13,7 @@ from PyQt5.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
+    QScrollBar,
     QSplitter,
     QTabWidget,
     QToolButton,
@@ -42,12 +43,24 @@ class EditorPreviewPair(QWidget):
         self._mode_applied: bool = False
         self._vditor_pane: VditorPane | None = None  # 懒加载
 
-        # 分割器：左编辑 右预览
+        # 分割器：左编辑 右预览（预览右侧挂原生滚动条，仅阅读模式显示）
         self._splitter = QSplitter()
         self.editor = MarkdownEditor()
         self.preview = PreviewPane()
+        self._reading_scrollbar = QScrollBar(Qt.Vertical)
+        self._reading_scrollbar.setFixedWidth(10)
+        self._reading_scrollbar.hide()
+        self.preview.attach_native_scrollbar(self._reading_scrollbar)
+
+        self._preview_host = QWidget()
+        preview_layout = QHBoxLayout(self._preview_host)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(0)
+        preview_layout.addWidget(self.preview, 1)
+        preview_layout.addWidget(self._reading_scrollbar)
+
         self._splitter.addWidget(self.editor)
-        self._splitter.addWidget(self.preview)
+        self._splitter.addWidget(self._preview_host)
         self._splitter.setSizes([480, 520])
 
         from PyQt5.QtWidgets import QVBoxLayout
@@ -237,21 +250,27 @@ class EditorPreviewPair(QWidget):
         self._pane_toggle.setVisible(show_pane)
 
         if mode == "reading":
-            # 阅读模式：仅预览，全宽
+            # 阅读模式：仅预览，全宽；网页滚动条隐藏，由右侧原生滚动条代理
             self._hide_vditor()
             self.editor.hide()
-            self.preview.show()
+            self._preview_host.show()
+            self._reading_scrollbar.hide()
+            self.preview.set_native_scroll_proxy_enabled(True)
             self.render_now()
         elif mode == "edit":
             # 源码编辑：编辑器可见，预览按 dual_pane 决定
             self._hide_vditor()
             self.editor.show()
             if dual_pane:
-                self.preview.show()
+                self._preview_host.show()
+                self._reading_scrollbar.hide()
+                self.preview.set_native_scroll_proxy_enabled(False)
                 self._restore_split()
                 self.render_now()
             else:
-                self.preview.hide()
+                self._preview_host.hide()
+                self._reading_scrollbar.hide()
+                self.preview.set_native_scroll_proxy_enabled(False)
             # 同步浮动按钮选中态并定位
             self._btn_dual.setChecked(dual_pane)
             self._btn_single.setChecked(not dual_pane)
@@ -259,7 +278,9 @@ class EditorPreviewPair(QWidget):
         elif mode == "instant":
             # 即时渲染：仅 Vditor，把编辑器内容推入
             self.editor.hide()
-            self.preview.hide()
+            self._preview_host.hide()
+            self._reading_scrollbar.hide()
+            self.preview.set_native_scroll_proxy_enabled(False)
             self._ensure_vditor()
             self._vditor_pane.show()
             self._vditor_pane.set_content(self.editor.get_text())

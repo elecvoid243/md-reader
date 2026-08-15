@@ -12,7 +12,8 @@ import os
 
 from PyQt5.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot
 from PyQt5.QtWebChannel import QWebChannel
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebEngineWidgets import QWebEnginePage, QWebEngineView
+from PyQt5.QtWidgets import QMenu, QScrollBar
 
 # 资源目录（相对于项目根目录）
 _RESOURCES_DIR = os.path.join(
@@ -33,6 +34,7 @@ class JsBridge(QObject):
     toc_updated = pyqtSignal(list)  # TOC 列表 [{level, text, id}, ...]
     render_finished = pyqtSignal()  # 渲染完成
     scroll_updated = pyqtSignal(float)  # 预览区滚动比例
+    scroll_metrics = pyqtSignal(int, int, int)  # top, scrollHeight, clientHeight
 
     @pyqtSlot(str)
     def onTocUpdate(self, toc_json: str) -> None:  # noqa: N802
@@ -53,6 +55,11 @@ class JsBridge(QObject):
         """预览区滚动比例"""
         self.scroll_updated.emit(percent)
 
+    @pyqtSlot(int, int, int)
+    def onScrollMetrics(self, top: int, height: int, client: int) -> None:  # noqa: N802
+        """预览区滚动尺寸（原生滚动条代理）"""
+        self.scroll_metrics.emit(top, height, client)
+
 
 class PreviewPane(QWebEngineView):
     """Markdown 预览面板"""
@@ -61,6 +68,7 @@ class PreviewPane(QWebEngineView):
     toc_updated = pyqtSignal(list)
     render_finished = pyqtSignal()
     scroll_updated = pyqtSignal(float)
+    scroll_metrics = pyqtSignal(int, int, int)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -74,10 +82,18 @@ class PreviewPane(QWebEngineView):
         # 启动 load —— 避免每个新标签页都立即解析 marked/katex/mermaid 等 JS）
         self._load_started = False
 
+        # 阅读模式的原生滚动条代理
+        self._native_scrollbar: QScrollBar | None = None
+        self._proxy_enabled = False
+        self._apply_proxy_when_ready = False
+        self._updating_native_scrollbar = False
+
         # 转发信号
         self._bridge.toc_updated.connect(self.toc_updated)
         self._bridge.render_finished.connect(self.render_finished)
         self._bridge.scroll_updated.connect(self.scroll_updated)
+        self._bridge.scroll_metrics.connect(self.scroll_metrics)
+        self._bridge.scroll_metrics.connect(self._on_scroll_metrics)
 
         # 设置 QWebChannel
         self._channel = QWebChannel()
@@ -86,6 +102,49 @@ class PreviewPane(QWebEngineView):
 
         # 页面加载完成信号（加载本身推迟到 _ensure_loaded）
         self.loadFinished.connect(self._on_load_finished)
+
+    def attach_native_scrollbar(self, scrollbar: QScrollBar) -> None:
+        """阅读模式接入原生 Qt 滚动条，由它代理网页滚动"""
+        if self._native_scrollbar is not None:
+            try:
+                self._native_scrollbar.valueChanged.disconnect(
+                    self._on_native_scrollbar_changed
+                )
+            except TypeError:
+                pass
+        self._native_scrollbar = scrollbar
+        scrollbar.valueChanged.connect(self._on_native_scrollbar_changed)
+
+    def set_native_scroll_proxy_enabled(self, enabled: bool) -> None:
+        """开启/关闭阅读模式的滚动条代理"""
+        self._proxy_enabled = enabled
+        self._apply_proxy_when_ready = enabled
+        if self._native_scrollbar is not None:
+            self._native_scrollbar.setVisible(enabled)
+        if self._ready:
+            self.page().runJavaScript(
+                "setNativeScrollProxy(%s);" % ("true" if enabled else "false")
+            )
+
+    def _on_native_scrollbar_changed(self, value: int) -> None:
+        if self._updating_native_scrollbar or not self._proxy_enabled:
+            return
+        self.page().runJavaScript(f"setScrollTop({int(value)});")
+
+    def _on_scroll_metrics(self, top: int, height: int, client: int) -> None:
+        bar = self._native_scrollbar
+        if bar is None or not self._proxy_enabled:
+            return
+        maximum = max(0, height - client)
+        self._updating_native_scrollbar = True
+        try:
+            bar.setRange(0, maximum)
+            bar.setPageStep(max(1, client))
+            bar.setVisible(maximum > 0)
+            if not bar.isSliderDown():
+                bar.setValue(min(max(top, 0), maximum))
+        finally:
+            self._updating_native_scrollbar = False
 
     def _ensure_loaded(self) -> None:
         """按需启动页面加载（幂等）"""
@@ -102,6 +161,11 @@ class PreviewPane(QWebEngineView):
             self._ready = True
             # 页面重新加载后 DOM 已重置，渲染缓存同步失效
             self._last_rendered = None
+            # 页面加载前可能已设置过滚动代理状态，补发一次
+            self.page().runJavaScript(
+                "setNativeScrollProxy(%s);"
+                % ("true" if self._apply_proxy_when_ready else "false")
+            )
             # 如果有等待渲染的内容，立即渲染
             if self._pending_markdown is not None:
                 text = self._pending_markdown
@@ -142,6 +206,27 @@ class PreviewPane(QWebEngineView):
         """滚动到指定标题"""
         js_code = f"scrollToHeading({json.dumps(heading_id)});"
         self.page().runJavaScript(js_code)
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        """
+        覆盖 QWebEngineView 默认右键菜单。
+
+        默认菜单里的 Back/Forward 在本应用中无意义；Reload 会丢失当前
+        已渲染的 Markdown 内容；View Page Source 也不是应用需要的入口。
+        这里只保留实际有用的复制/全选。
+        """
+        menu = QMenu(self)
+        copy_action = menu.addAction("复制")
+        copy_action.setEnabled(self.page().hasSelection())
+        copy_action.triggered.connect(
+            lambda: self.page().triggerAction(QWebEnginePage.Copy)
+        )
+        select_all_action = menu.addAction("全选")
+        select_all_action.triggered.connect(
+            lambda: self.page().triggerAction(QWebEnginePage.SelectAll)
+        )
+        menu.exec_(event.globalPos())
+        event.accept()
 
     def get_rendered_html(self, callback) -> None:
         """获取渲染后的 HTML（异步，通过 callback 返回）"""

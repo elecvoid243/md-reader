@@ -21,7 +21,13 @@ from PyQt5.QtGui import (
     QTextCharFormat,
     QTextCursor,
 )
-from PyQt5.QtWidgets import QPlainTextEdit, QTextEdit, QWidget
+from PyQt5.QtWidgets import (
+    QApplication,
+    QMenu,
+    QPlainTextEdit,
+    QTextEdit,
+    QWidget,
+)
 
 
 # ──────────────────────────────────────────────
@@ -57,10 +63,8 @@ class MarkdownHighlighter(QSyntaxHighlighter):
     ) -> QTextCharFormat:
         fmt = QTextCharFormat()
         fmt.setForeground(QColor(color))
-        if bold:
-            fmt.setFontWeight(QFont.Bold)
-        if italic:
-            fmt.setFontItalic(True)
+        # 源码编辑视图只做语法着色，不应用粗体/斜体等字体样式，
+        # 避免 Markdown 语法在源码中被“实时渲染”（例如 *斜体* 变斜体）。
         return fmt
 
     def _setup_rules(self) -> None:
@@ -236,8 +240,20 @@ class MarkdownEditor(QPlainTextEdit):
         digits = max(1, len(str(self.blockCount())))
         return 12 + self.fontMetrics().horizontalAdvance("9") * digits
 
+    def _resize_line_number_area(self) -> None:
+        """把行号栏固定到编辑器内容区左侧，并占据 viewport 左边距"""
+        rect = self.contentsRect()
+        self._line_area.setGeometry(
+            QRect(rect.left(), rect.top(), self.line_number_area_width(), rect.height())
+        )
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._resize_line_number_area()
+
     def _update_line_area_width(self, _new_block_count: int) -> None:
         self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+        self._resize_line_number_area()
 
     def _update_line_area(self, rect: QRect, dy: int) -> None:
         if dy:
@@ -311,6 +327,63 @@ class MarkdownEditor(QPlainTextEdit):
         """按比例设置滚动位置"""
         vbar = self.verticalScrollBar()
         vbar.setValue(int(vbar.maximum() * percent))
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        """源码编辑区右键菜单：全部中文，并单独提供“粘贴并匹配样式”"""
+        clipboard = QApplication.clipboard()
+        cursor = self.textCursor()
+        has_selection = cursor.hasSelection()
+
+        menu = QMenu(self)
+
+        undo_action = menu.addAction("撤销")
+        undo_action.setEnabled(self.document().isUndoAvailable())
+        undo_action.triggered.connect(self.undo)
+
+        redo_action = menu.addAction("重做")
+        redo_action.setEnabled(self.document().isRedoAvailable())
+        redo_action.triggered.connect(self.redo)
+
+        menu.addSeparator()
+
+        cut_action = menu.addAction("剪切")
+        cut_action.setEnabled(has_selection)
+        cut_action.triggered.connect(self.cut)
+
+        copy_action = menu.addAction("复制")
+        copy_action.setEnabled(has_selection)
+        copy_action.triggered.connect(self.copy)
+
+        paste_action = menu.addAction("粘贴")
+        paste_action.setEnabled(self.canPaste())
+        paste_action.triggered.connect(self.paste)
+
+        plain_paste_action = menu.addAction("粘贴并匹配样式")
+        plain_paste_action.setEnabled(bool(clipboard.text()))
+        plain_paste_action.triggered.connect(self._paste_plain_text)
+
+        delete_action = menu.addAction("删除")
+        delete_action.setEnabled(has_selection)
+        delete_action.triggered.connect(self._delete_selection)
+
+        menu.addSeparator()
+
+        select_all_action = menu.addAction("全选")
+        select_all_action.triggered.connect(self.selectAll)
+
+        menu.exec_(event.globalPos())
+        event.accept()
+
+    def _paste_plain_text(self) -> None:
+        """以纯文本方式粘贴剪贴板内容，丢弃富文本格式"""
+        text = QApplication.clipboard().text()
+        if text:
+            self.insertPlainText(text)
+
+    def _delete_selection(self) -> None:
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            cursor.removeSelectedText()
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         super().wheelEvent(event)

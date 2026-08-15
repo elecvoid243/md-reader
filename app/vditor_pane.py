@@ -18,7 +18,8 @@ from collections.abc import Callable
 
 from PyQt5.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot
 from PyQt5.QtWebChannel import QWebChannel
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebEngineWidgets import QWebEnginePage, QWebEngineView
+from PyQt5.QtWidgets import QApplication, QMenu
 
 _RESOURCES_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources"
@@ -80,6 +81,62 @@ class VditorPane(QWebEngineView):
             self._pending_content = None
             self.set_content(content)
         self.ready.emit()
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        """
+        覆盖 QWebEngineView 默认英文右键菜单，只保留 Vditor 编辑所需操作。
+
+        “粘贴并匹配样式”不使用 Chromium 默认动作，而是直接读取 Qt 剪贴板
+        纯文本后用 insertText 插入，确保与普通“粘贴”行为真正不同。
+        """
+        clipboard = QApplication.clipboard()
+        has_selection = self.page().hasSelection()
+        has_text = clipboard.mimeData().hasText()
+
+        menu = QMenu(self)
+
+        cut_action = menu.addAction("剪切")
+        cut_action.setEnabled(has_selection)
+        cut_action.triggered.connect(
+            lambda: self.page().triggerAction(QWebEnginePage.Cut)
+        )
+
+        copy_action = menu.addAction("复制")
+        copy_action.setEnabled(has_selection)
+        copy_action.triggered.connect(
+            lambda: self.page().triggerAction(QWebEnginePage.Copy)
+        )
+
+        paste_action = menu.addAction("粘贴")
+        paste_action.setEnabled(has_text)
+        paste_action.triggered.connect(
+            lambda: self.page().triggerAction(QWebEnginePage.Paste)
+        )
+
+        plain_paste_action = menu.addAction("粘贴并匹配样式")
+        plain_paste_action.setEnabled(has_text)
+        plain_paste_action.triggered.connect(self._paste_plain_text)
+
+        menu.addSeparator()
+
+        select_all_action = menu.addAction("全选")
+        select_all_action.triggered.connect(
+            lambda: self.page().triggerAction(QWebEnginePage.SelectAll)
+        )
+
+        menu.exec_(event.globalPos())
+        event.accept()
+
+    def _paste_plain_text(self) -> None:
+        """以纯文本方式插入剪贴板内容，绕过 HTML 粘贴逻辑"""
+        text = QApplication.clipboard().text()
+        if not text:
+            return
+        js_code = (
+            "focusVditor(); document.execCommand('insertText', false, %s);"
+            % json.dumps(text)
+        )
+        self.page().runJavaScript(js_code)
 
     def set_content(self, md: str) -> None:
         """设置 Markdown 内容（未就绪时缓存）"""

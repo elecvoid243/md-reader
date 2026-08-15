@@ -5262,7 +5262,10 @@ var clickToc = function (event, vditor) {
                 if (vditor.element.offsetTop < window.scrollY) {
                     window.scrollTo(window.scrollX, vditor.element.offsetTop);
                 }
-                vditor[vditor.currentMode].element.scrollTop = headingElement.offsetTop;
+                // MD Reader 的 IR 滚动容器是全宽 .vditor-ir（pre 的父元素），
+                // 让 Vditor 内置大纲跳转也滚到该容器。
+                vditor[vditor.currentMode].element.parentElement.scrollTop =
+                    headingElement.offsetTop;
             }
         }
         return;
