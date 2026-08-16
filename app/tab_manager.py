@@ -31,11 +31,16 @@ class EditorPreviewPair(QWidget):
 
     # 预览不可见时（即时渲染/单栏源码），TOC 需从源码提取更新
     headings_changed = pyqtSignal(list)
+    # 脏状态翻转时发出（用于实时刷新标签标题圆点）
+    dirty_changed = pyqtSignal(bool)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.file_path: str | None = None
         self.is_dirty: bool = False
+        # 最近一次「加载/保存」时的内容快照，作为内容级脏检测的基准：
+        # 仅当当前文本与快照不一致时才视为有未保存更改（改回原样=干净）。
+        self._saved_content: str = ""
         self.view_mode: str = "reading"  # reading / edit / instant
         self.dual_pane: bool = True  # 源码编辑模式下是否显示预览
         # 视图模式是否已真正应用过（防止 set_view_mode 的相同模式短路
@@ -163,8 +168,28 @@ class EditorPreviewPair(QWidget):
         super().resizeEvent(event)
         self._reposition_pane_toggle()
 
+    def _set_dirty(self, dirty: bool) -> None:
+        """统一脏标记更新入口：仅在状态翻转时发出 dirty_changed 信号。"""
+        if dirty == self.is_dirty:
+            return
+        self.is_dirty = dirty
+        self.dirty_changed.emit(dirty)
+
+    def _recompute_dirty(self) -> None:
+        """按编辑器当前文本与已保存快照的差异更新脏标记（内容级检测）。
+
+        先用 O(1) 的字符数比较做快速路径：大文档下每次按键都调用
+        toPlainText() 做全文提取会带来可感知延迟（5MB 文档约 19ms）。
+        QTextDocument 末尾隐含一个块分隔符，故字符数需减 1 对齐。
+        """
+        doc_len = self.editor.document().characterCount() - 1
+        if doc_len != len(self._saved_content):
+            self._set_dirty(True)
+            return
+        self._set_dirty(self.editor.get_text() != self._saved_content)
+
     def _on_text_changed(self) -> None:
-        self.is_dirty = True
+        self._recompute_dirty()
         self._debounce.start(300)  # 300ms 防抖
 
     def _do_render(self) -> None:
@@ -235,7 +260,10 @@ class EditorPreviewPair(QWidget):
 
     def _finish_leave_instant(self, md: str | None, mode: str, dual_pane: bool) -> None:
         """从即时渲染切出：把 Vditor 内容同步回编辑器后再应用目标模式"""
-        if md is not None:
+        if md is not None and self.is_dirty:
+            # 干净状态跳过回写：Vditor 的 getValue() 会对 Markdown 做归一化
+            # （表格分隔符、代码块空行等），回写会污染编辑器并触发
+            # _recompute_dirty 把归一化差异误判为未保存更改
             self.editor.set_text(md)
         self._apply_mode(mode, dual_pane)
 
@@ -299,8 +327,9 @@ class EditorPreviewPair(QWidget):
             self._vditor_pane.hide()
 
     def _on_vditor_input(self, text: str) -> None:
-        """Vditor 中用户输入 → 标记脏状态 + 缓存最新 Markdown"""
-        self.is_dirty = True
+        """Vditor 中用户输入 → 内容级标记脏状态 + 缓存最新 Markdown"""
+        # 直接与快照比较：避免进入即时渲染时 set_content 触发的回显被误判为修改
+        self._set_dirty(text != self._saved_content)
         self._pending_vditor_text = text
         # 只做本地合并，不再从这里发起第二次 getVditorContent()
         self._vditor_sync_timer.start(150)
@@ -403,8 +432,13 @@ class TabManager(QTabWidget):
         """
         pair = EditorPreviewPair()
         pair.file_path = file_path
+        # 脏状态翻转 → 实时刷新标签标题（● 前缀）
+        pair.dirty_changed.connect(lambda _dirty, p=pair: self._on_pair_dirty_changed(p))
 
         if content:
+            # 先记录快照再填充编辑器：set_text 触发 textChanged → _recompute_dirty，
+            # 快照已就位时比较结果即为「干净」，下方再显式清零以双保险。
+            pair._saved_content = content
             pair.editor.set_text(content)
             pair.is_dirty = False
 
@@ -517,6 +551,13 @@ class TabManager(QTabWidget):
         pair = self.current_pair()
         self.current_pair_changed.emit(pair)
 
+    def _on_pair_dirty_changed(self, pair: EditorPreviewPair) -> None:
+        """脏状态翻转 → 实时刷新标签标题（● 前缀）"""
+        for i in range(self.count()):
+            if self.widget(i) is pair:
+                self.update_title(i)
+                break
+
     def _make_title(self, file_path: str | None) -> str:
         if file_path:
             return os.path.basename(file_path)
@@ -547,7 +588,9 @@ class TabManager(QTabWidget):
                 f.write(content)
         except OSError:
             return
-        pair.is_dirty = False
+        # 写盘成功后同步快照，作为后续内容级脏检测的基准
+        pair._saved_content = content
+        pair._set_dirty(False)
         for i in range(self.count()):
             if self.widget(i) is pair:
                 self.update_title(i)

@@ -483,16 +483,35 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(
             self, "另存为", "", "Markdown 文件 (*.md);;所有文件 (*)"
         )
-        if path:
+        if not path:
+            return
+
+        def _finish_save_as(content: str | None) -> None:
+            if content is None:
+                QMessageBox.warning(
+                    self,
+                    "保存失败",
+                    "无法获取编辑器内容（Vditor 未就绪或取值失败），文件未保存。",
+                )
+                return
             try:
                 with open(path, "w", encoding="utf-8") as f:
-                    f.write(pair.editor.get_text())
-                pair.file_path = path
-                pair.is_dirty = False
-                self._tabs.update_title(self._tabs.currentIndex())
-                self._status_file.setText(path)
+                    f.write(content)
             except OSError as e:
                 QMessageBox.warning(self, "保存失败", str(e))
+                return
+            pair.file_path = path
+            pair._saved_content = content
+            pair._set_dirty(False)
+            # 路径变化后标题与悬浮提示需刷新（与脏状态翻转无关）
+            for i in range(self._tabs.count()):
+                if self._tabs.widget(i) is pair:
+                    self._tabs.update_title(i)
+                    break
+            self._status_file.setText(path)
+
+        # 即时渲染模式下编辑器文本可能滞后，统一走 get_current_content 精确取值
+        pair.get_current_content(_finish_save_as)
 
     def _new_tab(self) -> None:
         pair = self._tabs.add_tab()
