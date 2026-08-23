@@ -2,7 +2,7 @@
 main.py — MD Reader 应用入口
 
 启动 PyQt5 应用，初始化主窗口。
-支持命令行参数直接打开文件。
+支持命令行参数直接打开文件；已运行实例时转发参数并复用（单实例）。
 
 用法:
     python main.py              # 启动空窗口
@@ -22,6 +22,7 @@ from PyQt5.QtCore import Qt  # noqa: E402
 from PyQt5.QtWidgets import QApplication  # noqa: E402
 
 from app.main_window import MainWindow  # noqa: E402
+from app.single_instance import SingleInstanceGuard, bring_window_to_front  # noqa: E402
 
 
 def main() -> None:
@@ -33,15 +34,30 @@ def main() -> None:
     app.setApplicationName("MD Reader")
     app.setOrganizationName("md-reader")
 
+    # 单实例：已有实例在运行时转发文件路径后直接退出
+    paths = []
+    if len(sys.argv) > 1 and os.path.isfile(sys.argv[1]):
+        paths = [os.path.abspath(sys.argv[1])]
+
+    guard = SingleInstanceGuard("md-reader")
+    if not guard.acquire(paths):
+        return
+
     # 创建主窗口
     window = MainWindow()
     window.show()
 
+    # 后续实例转发来的文件：打开并置前窗口（无参数时仅置前）
+    def on_paths_received(forwarded: list) -> None:
+        for path in forwarded:
+            window.open_file(path)
+        bring_window_to_front(window)
+
+    guard.pathsReceived.connect(on_paths_received)
+
     # 命令行参数：打开文件
-    if len(sys.argv) > 1:
-        file_path = sys.argv[1]
-        if os.path.isfile(file_path):
-            window.open_file(os.path.abspath(file_path))
+    if paths:
+        window.open_file(paths[0])
 
     sys.exit(app.exec_())
 
