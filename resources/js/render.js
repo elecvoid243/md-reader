@@ -157,161 +157,396 @@ function renderMathCached(container) {
     });
 }
 
+/* ========== 分块增量渲染 ========== */
+
+// 块映射状态：entries[i] = { h: 源码 hash, n: 对应 #content 顶层子节点数 }
+// 首次渲染 / 强制重建时建立；重渲染时按 hash 对比，只重新解析并替换
+// 变化的块，未变化块的 DOM 原样保留（跳过解析、KaTeX、hljs 与布局）。
+const blockState = { entries: [], ready: false };
+let forceFullRender = true; // 主题切换等全局状态变化后置位，下次全量重建
+
+// 重同步搜索窗口：diff 区域向前最多找这么多个块的对齐点，
+// 超出则视为全文重写（退化为一次全量替换）
+const _RESYNC_LIMIT = 200;
+
+const _LIST_RE = /^(?: {0,3})(?:[-*+]|\d{1,9}[.)])(?: |$)/;
+const _LINK_DEF_RE = /^ {0,3}\[[^\]]*\]: *\S+ *$/;
+
+/**
+ * 把 Markdown 源码拆成顶层块。
+ * 只在空行处分割（围栏代码 / 块级公式内的空行不算），
+ * 列表与引用跨空行延续时并入同一块。拆分只影响增量粒度：
+ * 合并相邻构造与整篇解析结果一致（marked 对同一文本的输出不变），
+ * 只有错误地"拆开"本应一体的块才会改变渲染，故偏向保守合并。
+ */
+function splitBlocks(mdText) {
+    const lines = mdText.split('\n');
+    const blocks = [];
+    let cur = null;
+    let mode = null; // null | 'quote' | 'list'：空行后的延续判断
+    let fence = null; // '`' | '~'：围栏代码内
+    let inMath = false; // 多行 $$...$$ 内
+    let blanks = 0;
+
+    function flush() {
+        if (cur !== null) {
+            while (cur.length && cur[cur.length - 1].trim() === '') cur.pop();
+            if (cur.length) blocks.push(cur.join('\n'));
+        }
+        cur = null;
+        mode = null;
+    }
+
+    for (const line of lines) {
+        const stripped = line.trim();
+
+        if (fence) {
+            if (cur === null) cur = [];
+            cur.push(line);
+            if ((fence === '`' && /^`{3,}\s*$/.test(stripped))
+                || (fence === '~' && /^~{3,}\s*$/.test(stripped))) {
+                fence = null;
+            }
+            continue;
+        }
+        if (inMath) {
+            if (cur === null) cur = [];
+            cur.push(line);
+            if (stripped.slice(-2) === '$$') inMath = false;
+            continue;
+        }
+
+        if (stripped === '') { blanks++; continue; }
+
+        const fenceMatch = stripped.match(/^(`{3,}|~{3,})/);
+        if (fenceMatch) {
+            // 空行后的顶层围栏开新块；无空行时并入当前块（解析结果一致）
+            if (cur !== null && blanks > 0) flush();
+            if (cur === null) cur = [];
+            cur.push(line);
+            blanks = 0;
+            fence = fenceMatch[1].charAt(0);
+            continue;
+        }
+
+        if (stripped.charAt(0) === '$' && stripped.slice(0, 2) === '$$') {
+            if (cur !== null && blanks > 0) flush();
+            if (cur === null) cur = [];
+            cur.push(line);
+            blanks = 0;
+            // 单行完整的 $$...$$ 不进入多行状态
+            if (!(stripped.length >= 4 && stripped.indexOf('$$', 2) >= 0)) {
+                inMath = true;
+            }
+            continue;
+        }
+
+        if (cur !== null && blanks > 0) {
+            const isQuote = stripped.charAt(0) === '>';
+            const isList = _LIST_RE.test(line);
+            const isIndented = line.charAt(0) === ' ' || line.charAt(0) === '\t';
+            const continues = (isQuote && mode === 'quote')
+                || ((isList || isIndented) && mode === 'list');
+            if (!continues) flush();
+        }
+        blanks = 0;
+        if (cur === null) cur = [];
+        cur.push(line);
+        if (stripped.charAt(0) === '>') mode = 'quote';
+        else if (_LIST_RE.test(line)) mode = 'list';
+        else if (mode !== 'list') mode = null;
+        // 列表内的缩进延续行保持 list 模式
+    }
+    flush();
+    return blocks;
+}
+
+/** 块源码 hash（双 32 位 FNV 风格组合，避免长期持有全部原文） */
+function blockHash(text) {
+    let h1 = 0xdeadbeef ^ text.length;
+    let h2 = 0x41c6ce57 ^ text.length;
+    for (let i = 0; i < text.length; i++) {
+        const c = text.charCodeAt(i);
+        h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+        h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+    }
+    return h1.toString(36) + '-' + h2.toString(36);
+}
+
+/**
+ * 收集纯链接定义块（[ref]: url）。
+ * 分块解析时变化的块拿不到别处定义的引用，统一前置这些定义
+ * （marked 对链接定义不产生任何输出，前置不影响渲染结果）。
+ */
+function collectLinkDefs(blocks) {
+    const defs = [];
+    for (const b of blocks) {
+        const linesArr = b.split('\n');
+        let allDef = true;
+        for (const l of linesArr) {
+            if (l.trim() === '') continue;
+            if (!_LINK_DEF_RE.test(l)) { allDef = false; break; }
+        }
+        if (allDef) defs.push(b);
+    }
+    return defs.join('\n\n');
+}
+
+/* ── 单块渲染管线（与旧全量管线相同步骤，作用域限定在块内） ── */
+
+function wrapTablesIn(root) {
+    root.querySelectorAll('table').forEach(function (table) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-wrap';
+        table.parentNode.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
+    });
+}
+
+async function renderMermaidIn(root) {
+    const mermaidBlocks = [];
+    root.querySelectorAll('pre code.language-mermaid').forEach(function (code) {
+        const pre = code.parentElement;
+        const holder = document.createComment(
+            'MERMAID_PLACEHOLDER_' + mermaidBlocks.length
+        );
+        mermaidBlocks.push(code.textContent);
+        pre.parentNode.replaceChild(holder, pre);
+    });
+    if (mermaidBlocks.length === 0) return;
+
+    const placeholderNodes = {};
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+    let commentNode;
+    while ((commentNode = walker.nextNode())) {
+        const pm = commentNode.textContent.match(/^MERMAID_PLACEHOLDER_(\d+)$/);
+        if (pm) placeholderNodes[parseInt(pm[1], 10)] = commentNode;
+    }
+
+    const pendingMermaid = [];
+    for (let i = 0; i < mermaidBlocks.length; i++) {
+        const holder = placeholderNodes[i];
+        if (!holder) continue;
+        const source = mermaidBlocks[i];
+        const div = document.createElement('div');
+        const cachedSvg = mermaidSvgCache.get(source);
+        if (cachedSvg !== undefined) {
+            div.className = 'mermaid';
+            div.setAttribute('data-processed', 'true');
+            div.innerHTML = cachedSvg;
+        } else {
+            div.className = 'mermaid';
+            div.textContent = source;
+            pendingMermaid.push({ node: div, source: source });
+        }
+        holder.parentNode.replaceChild(div, holder);
+    }
+
+    if (pendingMermaid.length > 0) {
+        try {
+            await mermaid.run({
+                nodes: pendingMermaid.map(function (p) { return p.node; }),
+            });
+            pendingMermaid.forEach(function (p) {
+                if (p.node.querySelector('svg')) {
+                    cacheSet(mermaidSvgCache, MERMAID_CACHE_MAX, p.source, p.node.innerHTML);
+                }
+            });
+        } catch (e) {
+            console.warn('[render.js] Mermaid render error:', e);
+            pendingMermaid.forEach(function (p) {
+                if (!p.node.querySelector('svg')) {
+                    p.node.innerHTML =
+                        '<div class="mermaid-error">⚠ Mermaid 渲染失败: ' +
+                        escapeHtml(e.message || String(e)) + '</div>';
+                }
+            });
+        }
+    }
+}
+
+function highlightCodeIn(root) {
+    root.querySelectorAll('pre code').forEach(function (block) {
+        if (block.classList.contains('language-mermaid')) return;
+        const langMatch = block.className.match(/language-([\w+-]+)/);
+        const cacheKey = (langMatch ? langMatch[1] : '') + '\u0001' + block.textContent;
+        const cachedHtml = hljsCache.get(cacheKey);
+        if (cachedHtml !== undefined) {
+            block.innerHTML = cachedHtml;
+            block.classList.add('hljs');
+            block.dataset.highlighted = 'true';
+        } else {
+            hljs.highlightElement(block);
+            cacheSet(hljsCache, HLJS_CACHE_MAX, cacheKey, block.innerHTML);
+        }
+    });
+}
+
+/**
+ * 渲染单个块为 DocumentFragment（不插入文档）。
+ * defsPrefix 为全部链接定义块的拼接文本，保证引用式链接可用。
+ */
+async function renderBlockFragment(blockText, defsPrefix) {
+    const holder = document.createElement('div');
+    // 链接定义与正文之间必须有空行，否则定义的 URL 会吞掉正文首行
+    //（如 [ref]: url## 标题 会被整体解析为一条链接定义）
+    const source = defsPrefix ? defsPrefix + '\n\n' + blockText : blockText;
+    const mathGuard = protectBlockMath(source);
+    let html = marked.parse(mathGuard.text);
+    html = restoreBlockMath(html, mathGuard.store);
+    holder.innerHTML = html;
+
+    wrapTablesIn(holder);
+    await renderMermaidIn(holder);
+    renderMathCached(holder);
+    highlightCodeIn(holder);
+    addCodeBlockHeaders(holder);
+
+    const frag = document.createDocumentFragment();
+    while (holder.firstChild) frag.appendChild(holder.firstChild);
+    return frag;
+}
+
+/* ── 全量重建（首次渲染 / 增量失败回退 / 全局状态变化） ── */
+
+async function renderAllBlocks(mdText, content) {
+    const prevRange = document.documentElement.scrollHeight - window.innerHeight;
+    const scrollRatio = prevRange > 0 ? window.scrollY / prevRange : 0;
+
+    const blocks = splitBlocks(mdText);
+    const defs = collectLinkDefs(blocks);
+    content.innerHTML = '';
+    const entries = [];
+    for (let k = 0; k < blocks.length; k++) {
+        const frag = await renderBlockFragment(blocks[k], defs);
+        entries.push({ h: blockHash(blocks[k]), n: frag.childNodes.length });
+        content.appendChild(frag);
+    }
+    blockState.entries = entries;
+    blockState.ready = true;
+    forceFullRender = false;
+
+    // 全量重建可能大幅改变内容高度，按比例恢复阅读位置
+    const newRange = document.documentElement.scrollHeight - window.innerHeight;
+    if (newRange > 0 && scrollRatio > 0) {
+        window.scrollTo(0, Math.round(newRange * scrollRatio));
+    }
+}
+
+/* ── 增量渲染：hash 对比，只替换变化的块 ── */
+
+/**
+ * 在旧侧 oldStart / 新侧 newStart 之后寻找最近的 hash 对齐点，
+ * 返回 [旧侧位置, 新侧位置]；找不到返回各自末尾。
+ */
+function findResync(old, newHashes, i, j) {
+    for (let span = 1; span <= _RESYNC_LIMIT; span++) {
+        const aHi = Math.min(old.length, i + span);
+        const bHi = Math.min(newHashes.length, j + span);
+        for (let x = i; x <= aHi; x++) {
+            for (let y = j; y <= bHi; y++) {
+                if (x === i && y === j) continue;
+                if (x < old.length && y < newHashes.length && old[x].h === newHashes[y]) {
+                    return [x, y];
+                }
+            }
+        }
+        if (aHi >= old.length && bHi >= newHashes.length) break;
+    }
+    return [old.length, newHashes.length];
+}
+
+async function renderIncremental(mdText, content) {
+    const blocks = splitBlocks(mdText);
+    const defs = collectLinkDefs(blocks);
+    const newHashes = blocks.map(blockHash);
+    const old = blockState.entries;
+
+    let i = 0, j = 0, domPos = 0;
+    const result = [];
+    while (i < old.length || j < blocks.length) {
+        if (i < old.length && j < blocks.length && old[i].h === newHashes[j]) {
+            result.push(old[i]);
+            domPos += old[i].n;
+            i++; j++;
+            continue;
+        }
+
+        const synced = findResync(old, newHashes, i, j);
+        const a = synced[0], b = synced[1];
+
+        let oldCount = 0;
+        for (let k = i; k < a; k++) oldCount += old[k].n;
+        if (domPos + oldCount > content.childNodes.length) {
+            // 块映射与 DOM 脱同步（外部改动等），交给上层回退全量
+            throw new Error('block mapping out of sync');
+        }
+
+        const children = content.childNodes;
+        const oldNodes = [];
+        for (let k = domPos; k < domPos + oldCount; k++) oldNodes.push(children[k]);
+
+        const frag = document.createDocumentFragment();
+        let newCount = 0;
+        for (let k = j; k < b; k++) {
+            const bf = await renderBlockFragment(blocks[k], defs);
+            result.push({ h: newHashes[k], n: bf.childNodes.length });
+            newCount += bf.childNodes.length;
+            frag.appendChild(bf);
+        }
+        const anchor = content.childNodes[domPos] || null;
+        content.insertBefore(frag, anchor);
+        for (const node of oldNodes) content.removeChild(node);
+
+        domPos += newCount;
+        i = a; j = b;
+    }
+    blockState.entries = result;
+}
+
 /* ========== 核心渲染函数 ========== */
 
 /**
- * 渲染 Markdown 文本（由 Python 端调用）
+ * 渲染 Markdown 文本（由 Python 端调用）。
+ * 首次全量建立块映射；此后增量渲染只替换变化的块，
+ * 未变化块的 DOM/布局完全不动（滚动位置天然保持）。
  * @param {string} mdText - Markdown 原文
  */
 async function renderMarkdown(mdText) {
     const content = document.getElementById('content');
     if (!mdText || mdText.trim() === '') {
         content.innerHTML = '<p class="placeholder-text">打开一个 Markdown 文件开始预览</p>';
+        blockState.ready = false;
         notifyRenderFinished();
         return;
     }
 
-    // 记录渲染前的滚动比例，渲染完成后恢复（避免防抖重渲染时预览跳动）
-    const prevScrollRange = document.documentElement.scrollHeight - window.innerHeight;
-    const scrollRatio = prevScrollRange > 0 ? window.scrollY / prevScrollRange : 0;
-
     try {
-        // 1. 保护块级公式 $$...$$（避免 marked 的 breaks 在公式内插入 <br>，
-        //    切割文本节点导致 KaTeX 无法匹配 $$ 定界符）
-        const mathGuard = protectBlockMath(mdText);
-
-        // 2. marked.js 解析 Markdown → HTML
-        let html = marked.parse(mathGuard.text);
-
-        // 2.5 还原块级公式（HTML 转义后回填，保持 $$...$$ 位于单一文本节点）
-        html = restoreBlockMath(html, mathGuard.store);
-
-        // 3. 设置 HTML 内容
-        content.innerHTML = html;
-
-        // 3.1 表格包裹滚动容器（见 markdown.css 的 .table-wrap）。
-        //     超宽表格需要横向滚动，但 table { display: block } 会让
-        //     匿名内层表格按内容收缩、撑不满宽度，因此滚动职责移到外层 div，
-        //     table 保持原生表格语义；innerHTML 每次全量重建，无重复包裹风险
-        content.querySelectorAll('table').forEach(function (table) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'table-wrap';
-            table.parentNode.insertBefore(wrapper, table);
-            wrapper.appendChild(table);
-        });
-
-        // 3.5 预处理：保护 mermaid 代码块（直接基于 DOM 提取，避免依赖
-        //     marked 序列化 HTML 的固定格式；同时避免被 KaTeX 误处理）
-        const mermaidBlocks = [];
-        content.querySelectorAll('pre code.language-mermaid').forEach(function (code) {
-            const pre = code.parentElement;
-            const holder = document.createComment(
-                'MERMAID_PLACEHOLDER_' + mermaidBlocks.length
-            );
-            mermaidBlocks.push(code.textContent);
-            pre.parentNode.replaceChild(holder, pre);
-        });
-
-        // 4. KaTeX 公式渲染（文本节点级缓存，见 renderMathCached）
-        renderMathCached(content);
-
-        // 5. 还原 Mermaid 占位符：单次 TreeWalker 收集全部注释占位符
-        //    （原实现每个块都重新遍历整棵 DOM 树，图多时为 O(n²)）
-        const placeholderNodes = {};
-        const walker = document.createTreeWalker(content, NodeFilter.SHOW_COMMENT);
-        let commentNode;
-        while ((commentNode = walker.nextNode())) {
-            const pm = commentNode.textContent.match(/^MERMAID_PLACEHOLDER_(\d+)$/);
-            if (pm) placeholderNodes[parseInt(pm[1], 10)] = commentNode;
-        }
-
-        // 缓存命中的图直接回填缓存 SVG；未命中的收集起来交给 mermaid 渲染
-        const pendingMermaid = []; // [{node, source}]
-        for (let i = 0; i < mermaidBlocks.length; i++) {
-            const holder = placeholderNodes[i];
-            if (!holder) continue;
-            const source = mermaidBlocks[i];
-            const div = document.createElement('div');
-            const cachedSvg = mermaidSvgCache.get(source);
-            if (cachedSvg !== undefined) {
-                div.className = 'mermaid';
-                div.setAttribute('data-processed', 'true');
-                div.innerHTML = cachedSvg;
-            } else {
-                div.className = 'mermaid';
-                div.textContent = source;
-                pendingMermaid.push({ node: div, source: source });
-            }
-            holder.parentNode.replaceChild(div, holder);
-        }
-
-        // 仅渲染未命中缓存的图表，成功后写入缓存（改一个字不再重画所有图）
-        if (pendingMermaid.length > 0) {
+        if (forceFullRender || !blockState.ready) {
+            await renderAllBlocks(mdText, content);
+        } else {
             try {
-                await mermaid.run({
-                    nodes: pendingMermaid.map(function (p) { return p.node; }),
-                });
-                pendingMermaid.forEach(function (p) {
-                    if (p.node.querySelector('svg')) {
-                        cacheSet(mermaidSvgCache, MERMAID_CACHE_MAX, p.source, p.node.innerHTML);
-                    }
-                });
+                await renderIncremental(mdText, content);
             } catch (e) {
-                console.warn('[render.js] Mermaid render error:', e);
-                pendingMermaid.forEach(function (p) {
-                    if (!p.node.querySelector('svg')) {
-                        p.node.innerHTML =
-                            '<div class="mermaid-error">⚠ Mermaid 渲染失败: ' +
-                            escapeHtml(e.message || String(e)) + '</div>';
-                    }
-                });
+                console.warn('[render.js] Incremental render failed, fallback:', e);
+                await renderAllBlocks(mdText, content);
             }
         }
-
-        // 6. highlight.js 代码高亮（跳过 mermaid；结果按 语言+源码 缓存，
-        //    未变化的代码块直接回填缓存，避免每次渲染全文重算）
-        content.querySelectorAll('pre code').forEach(function (block) {
-            if (block.classList.contains('language-mermaid')) return;
-            const langMatch = block.className.match(/language-([\w+-]+)/);
-            const cacheKey = (langMatch ? langMatch[1] : '') + '' + block.textContent;
-            const cachedHtml = hljsCache.get(cacheKey);
-            if (cachedHtml !== undefined) {
-                block.innerHTML = cachedHtml;
-                block.classList.add('hljs');
-                block.dataset.highlighted = 'true';
-            } else {
-                hljs.highlightElement(block);
-                cacheSet(hljsCache, HLJS_CACHE_MAX, cacheKey, block.innerHTML);
-            }
-        });
-
-        // 6.5 为代码块添加语言标签
-        addCodeBlockHeaders(content);
-
-        // 7. 为标题添加锚点 id（用于 TOC 跳转）
-        addHeadingIds(content);
-
-        // 8. 提取 TOC 并回传 Python
-        extractAndSendTOC(content);
-
-        // 8.5 恢复渲染前的滚动比例（innerHTML 重建 + mermaid 渲染后内容高度
-        //     可能变化，按比例恢复保持阅读位置稳定，避免编辑时预览跳动）
-        const newScrollRange = document.documentElement.scrollHeight - window.innerHeight;
-        if (newScrollRange > 0 && scrollRatio > 0) {
-            window.scrollTo(0, Math.round(newScrollRange * scrollRatio));
-        }
-
-        // 9. 通知渲染完成
-        notifyRenderFinished();
-        reportScrollMetrics();
-
     } catch (err) {
         console.error('[render.js] Render error:', err);
+        blockState.ready = false;
         content.innerHTML =
-            '<div class="render-error">渲染出错: ' + escapeHtml(err.message) + '</div>';
+            '<div class="render-error">渲染出错: ' + escapeHtml(err.message || String(err)) + '</div>';
         notifyRenderFinished();
         reportScrollMetrics();
+        return;
     }
+
+    // 标题 id / TOC 全量重算（遍历很便宜，且保证与全量渲染一致的去重序）
+    addHeadingIds(content);
+    extractAndSendTOC(content);
+    notifyRenderFinished();
+    reportScrollMetrics();
 }
 
 /* ========== 辅助函数 ========== */
@@ -424,6 +659,8 @@ function setTheme(themeName) {
     // Mermaid SVG 内嵌主题色，主题切换后缓存全部失效
     // （hljs 缓存产物只含通用 class，配色由 CSS 控制，无需清空）
     mermaidSvgCache.clear();
+    // 未变化块的 DOM 里还是旧主题的 SVG/高亮，必须整体重建
+    forceFullRender = true;
 
     const themeLink = document.getElementById('theme-stylesheet');
     const hljsLight = document.getElementById('hljs-light');
