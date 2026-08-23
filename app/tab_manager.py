@@ -88,6 +88,7 @@ class EditorPreviewPair(QWidget):
         # 即时渲染面板的搜索条（VditorPane 懒加载，控制器随之创建）
         self._vditor_search_bar = SearchBar()
         self._vditor_search: WebSearchController | None = None
+        self._vditor_host: QWidget | None = None
 
         self._splitter.addWidget(self._editor_host)
         self._splitter.addWidget(self._preview_host)
@@ -343,8 +344,10 @@ class EditorPreviewPair(QWidget):
 
         if mode == "reading":
             # 阅读模式：仅预览，全宽；网页滚动条隐藏，由右侧原生滚动条代理
+            # 注意显隐控制的是 splitter 的子项 host 容器：只隐藏内部控件
+            # 会让空 host 留在分割器里，出现半屏空白和可拖动的分割条
             self._hide_vditor()
-            self.editor.hide()
+            self._editor_host.hide()
             self._preview_host.show()
             self._reading_scrollbar.hide()
             self.preview.set_native_scroll_proxy_enabled(True)
@@ -352,7 +355,7 @@ class EditorPreviewPair(QWidget):
         elif mode == "edit":
             # 源码编辑：编辑器可见，预览按 dual_pane 决定
             self._hide_vditor()
-            self.editor.show()
+            self._editor_host.show()
             if dual_pane:
                 self._preview_host.show()
                 self._reading_scrollbar.hide()
@@ -369,11 +372,12 @@ class EditorPreviewPair(QWidget):
             self._reposition_pane_toggle()
         elif mode == "instant":
             # 即时渲染：仅 Vditor，把编辑器内容推入
-            self.editor.hide()
+            self._editor_host.hide()
             self._preview_host.hide()
             self._reading_scrollbar.hide()
             self.preview.set_native_scroll_proxy_enabled(False)
             self._ensure_vditor()
+            self._vditor_host.show()
             self._vditor_pane.show()
             self._vditor_pane.set_content(self.editor.get_text())
 
@@ -384,13 +388,13 @@ class EditorPreviewPair(QWidget):
             self._vditor_search = WebSearchController(
                 self._vditor_pane, self._vditor_search_bar
             )
-            vditor_host = QWidget()
-            host_layout = QVBoxLayout(vditor_host)
+            self._vditor_host = QWidget()
+            host_layout = QVBoxLayout(self._vditor_host)
             host_layout.setContentsMargins(0, 0, 0, 0)
             host_layout.setSpacing(0)
             host_layout.addWidget(self._vditor_search_bar)
             host_layout.addWidget(self._vditor_pane)
-            self._splitter.addWidget(vditor_host)
+            self._splitter.addWidget(self._vditor_host)
             self._vditor_pane.input_changed.connect(self._on_vditor_input)
 
             # IR 内容重绘是异步的，输入停顿后重跑搜索恢复高亮
@@ -409,6 +413,8 @@ class EditorPreviewPair(QWidget):
     def _hide_vditor(self) -> None:
         self._vditor_sync_timer.stop()
         self._pending_vditor_text = None
+        if self._vditor_host is not None:
+            self._vditor_host.hide()
         if self._vditor_pane is not None:
             self._vditor_pane.hide()
 
