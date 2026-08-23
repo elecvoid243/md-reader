@@ -14,9 +14,9 @@ from typing import List, Optional, Tuple
 
 from PyQt5.QtGui import QFontDatabase
 from PyQt5.QtWidgets import (
+    QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFontComboBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -101,14 +101,17 @@ class FontSettingsDialog(QDialog):
 
         self.setMinimumWidth(380)
 
-    def _make_combo(self, family: str, allow_default: bool = True) -> QFontComboBox:
-        """字体选择框；allow_default 时提供"跟随主题"空选项"""
-        combo = QFontComboBox()
-        families = _system_families()
-        combo.setEditable(False)
+    def _make_combo(self, family: str, allow_default: bool = True) -> QComboBox:
+        """字体选择框；allow_default 时提供"跟随主题"空选项。
+
+        不用 QFontComboBox：它会在构造/显示时自行重填字体模型
+        （含大量空条目），与手工添加的选项互相冲突，
+        currentData 也拿不到自定义数据。
+        """
+        combo = QComboBox()
         if allow_default:
             combo.addItem("（跟随主题）", "")
-        for f in families:
+        for f in _system_families():
             combo.addItem(f, f)
         # 当前值不在系统字体列表时（如换过机器）补入，保证不丢失
         if family:
