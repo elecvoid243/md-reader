@@ -29,6 +29,9 @@ def main() -> None:
     # 启用高 DPI 缩放
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    # QtWebEngine 官方要求：必须在 QApplication 构造前开启，
+    # 否则 WebGL 上下文无法共享，渲染进程可能初始化失败
+    QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 
     app = QApplication(sys.argv)
     app.setApplicationName("MD Reader")
