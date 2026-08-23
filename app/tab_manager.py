@@ -36,6 +36,8 @@ class EditorPreviewPair(QWidget):
     headings_changed = pyqtSignal(list)
     # 脏状态翻转时发出（用于实时刷新标签标题圆点）
     dirty_changed = pyqtSignal(bool)
+    # 即时渲染面板懒加载创建完成时发出（主窗口补发主题/字体等全局设置）
+    vditor_created = pyqtSignal(object)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -385,6 +387,7 @@ class EditorPreviewPair(QWidget):
         """懒加载创建 VditorPane（首次进入即时渲染时）"""
         if self._vditor_pane is None:
             self._vditor_pane = VditorPane()
+            self.vditor_created.emit(self._vditor_pane)
             self._vditor_search = WebSearchController(
                 self._vditor_pane, self._vditor_search_bar
             )

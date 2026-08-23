@@ -649,6 +649,29 @@ function notifyRenderFinished() {
     }
 }
 
+/* ========== 字体设置 ========== */
+
+/**
+ * 应用字体设置（由 Python 端调用）。
+ * 通过注入持久 <style> 覆盖主题的 CSS 变量与正文字号；
+ * bodyStack / monoStack 为完整的字体栈字符串（含引号与回退），
+ * 传空字符串表示该项跟随主题默认。style 元素晚于所有 <link> 加载，
+ * 同特异性下级联胜出。
+ */
+function applyFontSettings(bodyStack, monoStack, sizePx) {
+    var el = document.getElementById('font-override');
+    if (!el) {
+        el = document.createElement('style');
+        el.id = 'font-override';
+        document.head.appendChild(el);
+    }
+    var css = '';
+    if (bodyStack) css += ':root{--font-body:' + bodyStack + ';}';
+    if (monoStack) css += ':root{--font-mono:' + monoStack + ';}';
+    if (sizePx > 0) css += 'body{font-size:' + sizePx + 'px;}';
+    el.textContent = css;
+}
+
 /* ========== 主题切换 ========== */
 
 /**

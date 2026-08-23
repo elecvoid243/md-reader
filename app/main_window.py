@@ -31,6 +31,7 @@ from PyQt5.QtWidgets import (
 from .config import Config
 from .exporter import export_html, export_pdf
 from .file_tree import FileTreeWidget
+from .font_dialog import FontSettingsDialog
 from .icons import build_icons
 from .tab_manager import EditorPreviewPair, TabManager
 from .theme_manager import ThemeManager
@@ -76,6 +77,7 @@ class MainWindow(QMainWindow):
         # 始终保留一个标签页：启动即打开空白的「未命名」页，
         # 用户直接编辑后保存时会走"另存为"流程创建新文件
         self._new_tab()
+        self._apply_fonts_all()
 
     # ──────────────────────────────────────────
     #  窗口基础设置
@@ -280,6 +282,13 @@ class MainWindow(QMainWindow):
         self._act_scroll_sync.setChecked(self._config.get("scroll_sync", True))
         self._act_scroll_sync.toggled.connect(self._toggle_scroll_sync)
         view_menu.addAction(self._act_scroll_sync)
+
+        view_menu.addSeparator()
+
+        self._act_font_settings = QAction("字体设置(&F)...", self)
+        self._act_font_settings.setStatusTip("配置预览与编辑器的字体和字号")
+        self._act_font_settings.triggered.connect(self._open_font_settings)
+        view_menu.addAction(self._act_font_settings)
 
         # ── 帮助菜单 ──
         help_menu = menubar.addMenu("帮助(&H)")
@@ -623,6 +632,10 @@ class MainWindow(QMainWindow):
         pair.set_view_mode(self._view_mode, self._dual_pane)
         pair.set_dual_pane_callback(self._request_dual_pane)
         pair.set_pane_icons(self._icons["pane_single"], self._icons["pane_dual"])
+        self._apply_fonts_to_pair(pair)
+        # 即时渲染面板懒加载创建，字体/主题等全局设置在创建时补发
+        pair.vditor_created.connect(
+            lambda _pane, p=pair: self._apply_fonts_to_pair(p))
         pair.set_search_icons(
             self._icons["search"],
             self._icons["chevron_up"],
@@ -631,6 +644,67 @@ class MainWindow(QMainWindow):
         )
         if pair.vditor_pane is not None:
             pair.vditor_pane.set_theme(self._theme_mgr.current_theme)
+
+    # ──────────────────────────────────────────
+    #  字体设置
+    # ──────────────────────────────────────────
+
+    def _open_font_settings(self) -> None:
+        """打开字体设置对话框，确定后保存配置并应用到所有标签页"""
+        dlg = FontSettingsDialog(
+            self._config.get("preview_font_family", ""),
+            self._config.get("preview_mono_family", ""),
+            self._config.get("preview_font_size", 16),
+            self._config.get("editor_font_family", "Consolas"),
+            self._config.get("font_size", 14),
+            self,
+        )
+        if not dlg.exec_():
+            return
+        body, mono, psize, efamily, esize = dlg.values()
+        self._config.set("preview_font_family", body)
+        self._config.set("preview_mono_family", mono)
+        self._config.set("preview_font_size", psize)
+        self._config.set("editor_font_family", efamily)
+        self._config.set("font_size", esize)
+        self._apply_fonts_all()
+
+    def _apply_fonts_all(self) -> None:
+        """把字体设置应用到所有标签页"""
+        for i in range(self._tabs.count()):
+            pair = self._tabs.widget(i)
+            if isinstance(pair, EditorPreviewPair):
+                self._apply_fonts_to_pair(pair)
+
+    def _apply_fonts_to_pair(self, pair: EditorPreviewPair) -> None:
+        """把字体设置应用到单个标签页（编辑器 + 预览 + 即时渲染）"""
+        family = self._config.get("editor_font_family", "Consolas")
+        size = self._config.get("font_size", 14)
+        pair.editor.set_editor_font(family, size)
+        # 全局 QSS 的 QWidget 字体会压过 setFont，编辑器字体必须走 QSS
+        pair.editor.setStyleSheet(self._theme_mgr.get_editor_style(family, size))
+
+        body_stack = self._compose_body_stack(
+            self._config.get("preview_font_family", ""))
+        mono_stack = self._compose_mono_stack(
+            self._config.get("preview_mono_family", ""))
+        preview_size = self._config.get("preview_font_size", 16)
+        pair.preview.apply_font_settings(body_stack, mono_stack, preview_size)
+        if pair.vditor_pane is not None:
+            pair.vditor_pane.apply_font_settings(body_stack, mono_stack, preview_size)
+
+    @staticmethod
+    def _compose_body_stack(family: str) -> str:
+        """用户选择的正文字体 + 主题回退栈；空字体返回空串（跟随主题）"""
+        if not family:
+            return ""
+        return '"%s", "Segoe UI", "Microsoft YaHei", sans-serif' % family
+
+    @staticmethod
+    def _compose_mono_stack(family: str) -> str:
+        if not family:
+            return ""
+        return '"%s", Consolas, "Courier New", monospace' % family
 
     # ──────────────────────────────────────────
     #  查找
@@ -680,7 +754,10 @@ class MainWindow(QMainWindow):
 
     def _apply_editor_theme(self) -> None:
         """将主题样式应用到所有编辑器（QSS + 绘制配色 + Vditor）"""
-        style = self._theme_mgr.get_editor_style()
+        style = self._theme_mgr.get_editor_style(
+            self._config.get("editor_font_family", "Consolas"),
+            self._config.get("font_size", 14),
+        )
         colors = self._theme_mgr.get_editor_colors()
         theme_name = self._theme_mgr.current_theme
         for i in range(self._tabs.count()):

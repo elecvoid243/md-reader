@@ -17,6 +17,9 @@ _DEFAULTS: dict[str, Any] = {
     "font_size": 14,
     "editor_font_family": "Consolas",
     "preview_font_size": 16,
+    # 预览字体家族（空串 = 跟随主题默认字体栈）
+    "preview_font_family": "",
+    "preview_mono_family": "",
     "window_width": 1280,
     "window_height": 800,
     "window_x": 100,

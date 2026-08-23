@@ -299,6 +299,33 @@
             }
         };
 
+        // 应用字体设置（由 Python 端调用）。注入持久 <style>：
+        // - 正文字体走 :root 的 --font-body 变量（vditor-theme.css 消费同名变量）
+        // - 等宽字体作用于代码
+        // - 字号作用于 IR 正文根节点
+        // bodyStack / monoStack 为完整字体栈字符串，空串表示跟随主题。
+        window.applyFontSettings = function (bodyStack, monoStack, sizePx) {
+            var el = document.getElementById('font-override');
+            if (!el) {
+                el = document.createElement('style');
+                el.id = 'font-override';
+                document.head.appendChild(el);
+            }
+            var css = '';
+            if (bodyStack) {
+                css += ':root{--font-body:' + bodyStack + ';}';
+            }
+            if (monoStack) {
+                css += '.vditor-reset code, .vditor-reset pre{font-family:'
+                    + monoStack + ' !important;}';
+            }
+            if (sizePx > 0) {
+                css += '.vditor-ir > pre.vditor-reset{font-size:'
+                    + sizePx + 'px !important;}';
+            }
+            el.textContent = css;
+        };
+
         // 搜索计数：统计正文中关键词出现次数（只读扫描，不修改 DOM）。
         // Python 侧 QWebEnginePage.findText 的回调只回传 bool，
         // 匹配总数由此函数提供。

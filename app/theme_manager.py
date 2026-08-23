@@ -443,8 +443,15 @@ QWidget#pane_toggle QToolButton:checked {{
 """
 
 
-def _build_editor_qss(p: dict) -> str:
-    """生成编辑器 QSS（背景/选区/光标）"""
+def _build_editor_qss(p: dict, family: str = "", size: int = 0) -> str:
+    """生成编辑器 QSS（背景/选区/光标/字体）。
+
+    全局 QSS 的 QWidget { font-family } 会压过 widget.setFont()，
+    用户选择的编辑器字体必须写进 QSS 才能生效。
+    """
+    font_css = ""
+    if family:
+        font_css = f'\n    font-family: "{family}";\n    font-size: {size}pt;'
     return f"""
 QPlainTextEdit {{
     background-color: {p["editor_bg"]};
@@ -452,7 +459,7 @@ QPlainTextEdit {{
     selection-background-color: {p["selection"]};
     selection-color: {p["ink_strong"]};
     border: none;
-    outline: none;
+    outline: none;{font_css}
 }}
 """
 
@@ -478,9 +485,9 @@ class ThemeManager:
         """应用主题到整个应用"""
         app.setStyleSheet(_build_qss(self.palette))
 
-    def get_editor_style(self) -> str:
-        """获取编辑器 QSS"""
-        return _build_editor_qss(self.palette)
+    def get_editor_style(self, family: str = "", size: int = 0) -> str:
+        """获取编辑器 QSS（可带用户字体设置）"""
+        return _build_editor_qss(self.palette, family, size)
 
     def get_editor_colors(self) -> dict:
         """获取编辑器绘制用色（行号栏/当前行等，供 paintEvent 使用）"""
