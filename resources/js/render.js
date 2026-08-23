@@ -18,10 +18,13 @@ marked.setOptions({
     mangle: false,      // 不转义邮箱
 });
 
-// 配置 mermaid（延迟渲染，由我们手动触发）
+// mermaid 基础配置（延迟渲染，由我们手动触发）
 // htmlLabels 关闭 + sequence 使用 SVG 文本：可被 QtSvg 等矢量渲染器识别，
 // 也便于无 Chrome 时用 PyQt5 生成 PDF。
-mermaid.initialize({
+// 注意：mermaid.initialize 会把未传递的字段重置回默认值，主题切换时
+// 必须整体重传本配置，否则 htmlLabels / fontFamily 会悄悄丢失，
+// 导致暗色主题下流程图退化为 foreignObject 标签、Qt 矢量导出丢文字
+const MERMAID_BASE_CONFIG = {
     startOnLoad: false,
     theme: 'default',
     securityLevel: 'loose',
@@ -34,7 +37,9 @@ mermaid.initialize({
         textPlacement: 'old',
         useMaxWidth: true,
     },
-});
+};
+
+mermaid.initialize(MERMAID_BASE_CONFIG);
 
 // QWebChannel 桥接对象
 window.bridge = null;
@@ -370,14 +375,16 @@ function setTheme(themeName) {
         hljsLight.disabled = true;
         hljsDark.disabled = false;
         document.body.classList.add('dark-theme');
-        // 更新 mermaid 主题
-        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+        // 更新 mermaid 主题（须整体重传基础配置，见 MERMAID_BASE_CONFIG 注释）
+        mermaid.initialize(
+            Object.assign({}, MERMAID_BASE_CONFIG, { theme: 'dark' }));
     } else {
         themeLink.href = '../css/theme-light.css';
         hljsLight.disabled = false;
         hljsDark.disabled = true;
         document.body.classList.remove('dark-theme');
-        mermaid.initialize({ startOnLoad: false, theme: 'default' });
+        mermaid.initialize(
+            Object.assign({}, MERMAID_BASE_CONFIG, { theme: 'default' }));
     }
 }
 
