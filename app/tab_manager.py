@@ -8,6 +8,7 @@ tab_manager.py — 多标签页管理
 from __future__ import annotations
 
 import os
+import time
 
 from PyQt5.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
@@ -116,6 +117,15 @@ class EditorPreviewPair(QWidget):
 
         # 滚动同步
         self._sync_lock = False
+        # 双栏同步节流：编辑器滚轮事件频率可达每秒数十次，
+        # 每次都 runJavaScript 往返会放大主线程负载，限制到 ~30Hz，
+        # 被丢弃的事件在尾沿补发最后一次位置
+        self._last_preview_sync = -1.0
+        self._pending_preview_percent: float | None = None
+        self._preview_sync_timer = QTimer()
+        self._preview_sync_timer.setSingleShot(True)
+        self._preview_sync_timer.setInterval(40)
+        self._preview_sync_timer.timeout.connect(self._flush_pending_preview_sync)
         self.editor.scroll_percent_changed.connect(self._sync_preview_scroll)
         self.preview.scroll_updated.connect(self._sync_editor_scroll)
 
@@ -228,10 +238,28 @@ class EditorPreviewPair(QWidget):
 
     def _sync_preview_scroll(self, percent: float) -> None:
         if self._sync_lock:
+            # 回声锁期间不发送，但记录最新位置，锁释放时补发
+            self._pending_preview_percent = percent
             return
+        now = time.monotonic()
+        if (now - self._last_preview_sync) * 1000 < 33:
+            self._pending_preview_percent = percent
+            self._preview_sync_timer.start()
+            return
+        self._do_preview_sync(percent)
+
+    def _do_preview_sync(self, percent: float) -> None:
+        self._last_preview_sync = time.monotonic()
         self._sync_lock = True
         self.preview.set_scroll_percent(percent)
         QTimer.singleShot(100, self._release_sync_lock)
+
+    def _flush_pending_preview_sync(self) -> None:
+        """节流窗口结束后补发最后一次滚轮位置（尾沿更新）"""
+        percent = self._pending_preview_percent
+        self._pending_preview_percent = None
+        if percent is not None and not self._sync_lock:
+            self._do_preview_sync(percent)
 
     def _sync_editor_scroll(self, percent: float) -> None:
         # 阅读模式下编辑器隐藏，跳过无谓的滚动条更新，
@@ -244,6 +272,15 @@ class EditorPreviewPair(QWidget):
 
     def _release_sync_lock(self) -> None:
         self._sync_lock = False
+        # 锁释放时补发积压的最新预览位置（编辑器滚动持续时保持跟踪）
+        percent = self._pending_preview_percent
+        self._pending_preview_percent = None
+        if percent is not None:
+            now = time.monotonic()
+            if (now - self._last_preview_sync) * 1000 < 33:
+                self._preview_sync_timer.start()
+            else:
+                self._do_preview_sync(percent)
 
     def render_now(self) -> None:
         """立即渲染（跳过防抖）"""

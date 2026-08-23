@@ -89,6 +89,74 @@ function cacheSet(map, maxSize, key, value) {
     }
 }
 
+// KaTeX 结果缓存：key = 公式所在文本节点的原文，value = 渲染后片段。
+// marked 重新生成的未变化区域文本内容不变，命中后无需再跑 KaTeX
+// （KaTeX 曾占全文渲染耗时的一半以上）；产物只含通用结构，
+// 配色由 CSS 控制，主题切换无需清空。
+const katexNodeCache = new Map();
+const KATEX_CACHE_MAX = 2000;
+
+const KATEX_OPTIONS = {
+    delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$', right: '$', display: false },
+        { left: '\\(', right: '\\)', display: false },
+        { left: '\\[', right: '\\]', display: true },
+    ],
+    throwOnError: false,
+    errorColor: '#cc0000',
+};
+
+// 与 auto-render 默认 ignoredTags 保持一致（这些子树不处理公式）
+const KATEX_IGNORED_TAGS = {
+    NOSCRIPT: 1, NOSTYLE: 1, STYLE: 1, TEXTAREA: 1, PRE: 1, CODE: 1, OPTION: 1,
+};
+
+/** 文本节点是否位于忽略标签（pre/code 等）内 */
+function mathInIgnoredTag(node, container) {
+    let el = node.parentElement;
+    while (el && el !== container) {
+        if (KATEX_IGNORED_TAGS[el.tagName]) return true;
+        el = el.parentElement;
+    }
+    return false;
+}
+
+/**
+ * KaTeX 渲染（文本节点级缓存）：
+ * 只处理含定界符的文本节点，未变化的节点直接回填缓存片段。
+ * 命中路径只做 Map 查找 + innerHTML 构造，完全跳过 KaTeX 解析。
+ */
+function renderMathCached(container) {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    const targets = [];
+    let node;
+    while ((node = walker.nextNode())) {
+        const t = node.nodeValue;
+        if (
+            (t.indexOf('$') >= 0 || t.indexOf('\\(') >= 0 || t.indexOf('\\[') >= 0)
+            && !mathInIgnoredTag(node, container)
+        ) {
+            targets.push(node);
+        }
+    }
+    targets.forEach(function (textNode) {
+        const src = textNode.nodeValue;
+        const span = document.createElement('span');
+        let html = katexNodeCache.get(src);
+        if (html === undefined) {
+            textNode.parentNode.replaceChild(span, textNode);
+            span.appendChild(textNode);
+            renderMathInElement(span, KATEX_OPTIONS);
+            html = span.innerHTML;
+            cacheSet(katexNodeCache, KATEX_CACHE_MAX, src, html);
+        } else {
+            span.innerHTML = html;
+            textNode.parentNode.replaceChild(span, textNode);
+        }
+    });
+}
+
 /* ========== 核心渲染函数 ========== */
 
 /**
@@ -144,17 +212,8 @@ async function renderMarkdown(mdText) {
             pre.parentNode.replaceChild(holder, pre);
         });
 
-        // 4. KaTeX 公式渲染
-        renderMathInElement(content, {
-            delimiters: [
-                { left: '$$', right: '$$', display: true },
-                { left: '$', right: '$', display: false },
-                { left: '\\(', right: '\\)', display: false },
-                { left: '\\[', right: '\\]', display: true },
-            ],
-            throwOnError: false,
-            errorColor: '#cc0000',
-        });
+        // 4. KaTeX 公式渲染（文本节点级缓存，见 renderMathCached）
+        renderMathCached(content);
 
         // 5. 还原 Mermaid 占位符：单次 TreeWalker 收集全部注释占位符
         //    （原实现每个块都重新遍历整棵 DOM 树，图多时为 O(n²)）
