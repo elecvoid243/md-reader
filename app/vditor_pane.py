@@ -54,8 +54,8 @@ class VditorPane(QWebEngineView):
         self._bridge = VditorBridge()
         self._ready = False
         self._pending_content: str | None = None
-        # 字体设置（body 栈, mono 栈, 字号）；就绪后补发
-        self._font_settings: tuple[str, str, int] | None = None
+        # 字体设置（body 栈, 标题栈, mono 栈, 字号）；就绪后补发
+        self._font_settings: tuple[str, str, str, int] | None = None
 
         # 转发信号
         self._bridge.ready.connect(self._on_ready)
@@ -159,16 +159,18 @@ class VditorPane(QWebEngineView):
         js = f"setVditorTheme({json.dumps(theme_name)});"
         self.page().runJavaScript(js)
 
-    def apply_font_settings(self, body_stack: str, mono_stack: str, size: int) -> None:
-        """应用字体设置（body/mono 为完整字体栈，空串表示跟随主题）"""
-        self._font_settings = (body_stack, mono_stack, size)
+    def apply_font_settings(
+        self, body_stack: str, heading_stack: str, mono_stack: str, size: int
+    ) -> None:
+        """应用字体设置（各字体栈为完整串，空串表示跟随主题）"""
+        self._font_settings = (body_stack, heading_stack, mono_stack, size)
         if self._ready:
             self._push_font_settings()
 
     def _push_font_settings(self) -> None:
-        body, mono, size = self._font_settings
-        js = "applyFontSettings(%s, %s, %d);" % (
-            json.dumps(body), json.dumps(mono), int(size))
+        body, heading, mono, size = self._font_settings
+        js = "applyFontSettings(%s, %s, %s, %d);" % (
+            json.dumps(body), json.dumps(heading), json.dumps(mono), int(size))
         self.page().runJavaScript(js)
 
     def scroll_to_heading(self, text: str) -> None:

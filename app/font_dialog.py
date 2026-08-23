@@ -44,7 +44,8 @@ def _system_families() -> List[str]:
 class FontSettingsDialog(QDialog):
     """字体设置对话框：确定后通过 values() 取结果（family 为空表示跟随主题）"""
 
-    def __init__(self, preview_family: str, preview_mono: str, preview_size: int,
+    def __init__(self, preview_family: str, preview_heading: str,
+                 preview_mono: str, preview_size: int,
                  editor_family: str, editor_size: int,
                  parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -58,6 +59,9 @@ class FontSettingsDialog(QDialog):
 
         self._body_combo = self._make_combo(preview_family)
         preview_form.addRow("正文字体：", self._body_combo)
+
+        self._heading_combo = self._make_combo(preview_heading)
+        preview_form.addRow("标题字体：", self._heading_combo)
 
         self._preview_size = QSpinBox()
         self._preview_size.setRange(10, 32)
@@ -126,6 +130,7 @@ class FontSettingsDialog(QDialog):
 
     def _reset_defaults(self) -> None:
         self._body_combo.setCurrentIndex(0)
+        self._heading_combo.setCurrentIndex(0)
         self._mono_combo.setCurrentIndex(0)
         self._preview_size.setValue(_DEFAULT_PREVIEW_SIZE)
         idx = self._editor_combo.findText(_DEFAULT_EDITOR_FAMILY)
@@ -133,10 +138,11 @@ class FontSettingsDialog(QDialog):
             self._editor_combo.setCurrentIndex(idx)
         self._editor_size.setValue(_DEFAULT_EDITOR_SIZE)
 
-    def values(self) -> Tuple[str, str, int, str, int]:
-        """返回 (预览正文字体, 预览等宽字体, 预览字号, 编辑器字体, 编辑器字号)"""
+    def values(self) -> Tuple[str, str, str, int, str, int]:
+        """返回 (正文字体, 标题字体, 等宽字体, 预览字号, 编辑器字体, 编辑器字号)"""
         return (
             self._body_combo.currentData() or "",
+            self._heading_combo.currentData() or "",
             self._mono_combo.currentData() or "",
             self._preview_size.value(),
             self._editor_combo.currentText(),

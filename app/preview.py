@@ -76,8 +76,8 @@ class PreviewPane(QWebEngineView):
         self._bridge = JsBridge()
         self._ready = False
         self._pending_markdown: str | None = None
-        # 字体设置（body 栈, mono 栈, 字号）；页面懒加载，就绪后补发
-        self._font_settings: tuple[str, str, int] | None = None
+        # 字体设置（body 栈, 标题栈, mono 栈, 字号）；页面懒加载，就绪后补发
+        self._font_settings: tuple[str, str, str, int] | None = None
         # 上次已送渲染的文本（相同则跳过，避免标签切换/重复触发时的全量重渲染）
         self._last_rendered: str | None = None
         # 页面是否已开始加载（懒加载：构造时不加载，首次真正需要渲染时才
@@ -202,16 +202,18 @@ class PreviewPane(QWebEngineView):
         js_code = f"setTheme({json.dumps(theme_name)});"
         self.page().runJavaScript(js_code)
 
-    def apply_font_settings(self, body_stack: str, mono_stack: str, size: int) -> None:
-        """应用字体设置（body/mono 为完整字体栈，空串表示跟随主题）"""
-        self._font_settings = (body_stack, mono_stack, size)
+    def apply_font_settings(
+        self, body_stack: str, heading_stack: str, mono_stack: str, size: int
+    ) -> None:
+        """应用字体设置（各字体栈为完整串，空串表示跟随主题）"""
+        self._font_settings = (body_stack, heading_stack, mono_stack, size)
         if self._ready:
             self._push_font_settings()
 
     def _push_font_settings(self) -> None:
-        body, mono, size = self._font_settings
-        js_code = "applyFontSettings(%s, %s, %d);" % (
-            json.dumps(body), json.dumps(mono), int(size))
+        body, heading, mono, size = self._font_settings
+        js_code = "applyFontSettings(%s, %s, %s, %d);" % (
+            json.dumps(body), json.dumps(heading), json.dumps(mono), int(size))
         self.page().runJavaScript(js_code)
 
     def set_scroll_percent(self, percent: float) -> None:

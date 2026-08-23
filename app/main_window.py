@@ -653,6 +653,7 @@ class MainWindow(QMainWindow):
         """打开字体设置对话框，确定后保存配置并应用到所有标签页"""
         dlg = FontSettingsDialog(
             self._config.get("preview_font_family", ""),
+            self._config.get("preview_heading_family", ""),
             self._config.get("preview_mono_family", ""),
             self._config.get("preview_font_size", 16),
             self._config.get("editor_font_family", "Consolas"),
@@ -661,8 +662,9 @@ class MainWindow(QMainWindow):
         )
         if not dlg.exec_():
             return
-        body, mono, psize, efamily, esize = dlg.values()
+        body, heading, mono, psize, efamily, esize = dlg.values()
         self._config.set("preview_font_family", body)
+        self._config.set("preview_heading_family", heading)
         self._config.set("preview_mono_family", mono)
         self._config.set("preview_font_size", psize)
         self._config.set("editor_font_family", efamily)
@@ -686,12 +688,16 @@ class MainWindow(QMainWindow):
 
         body_stack = self._compose_body_stack(
             self._config.get("preview_font_family", ""))
+        heading_stack = self._compose_heading_stack(
+            self._config.get("preview_heading_family", ""))
         mono_stack = self._compose_mono_stack(
             self._config.get("preview_mono_family", ""))
         preview_size = self._config.get("preview_font_size", 16)
-        pair.preview.apply_font_settings(body_stack, mono_stack, preview_size)
+        pair.preview.apply_font_settings(
+            body_stack, heading_stack, mono_stack, preview_size)
         if pair.vditor_pane is not None:
-            pair.vditor_pane.apply_font_settings(body_stack, mono_stack, preview_size)
+            pair.vditor_pane.apply_font_settings(
+                body_stack, heading_stack, mono_stack, preview_size)
 
     @staticmethod
     def _compose_body_stack(family: str) -> str:
@@ -699,6 +705,13 @@ class MainWindow(QMainWindow):
         if not family:
             return ""
         return '"%s", "Segoe UI", "Microsoft YaHei", sans-serif' % family
+
+    @staticmethod
+    def _compose_heading_stack(family: str) -> str:
+        """标题字体 + 主题的衬线回退栈；空字体返回空串（跟随主题）"""
+        if not family:
+            return ""
+        return '"%s", Georgia, "Palatino Linotype", "Songti SC", "SimSun", serif' % family
 
     @staticmethod
     def _compose_mono_stack(family: str) -> str:
