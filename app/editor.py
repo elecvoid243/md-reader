@@ -196,6 +196,10 @@ class MarkdownEditor(QPlainTextEdit):
             "border": "#e8e3d6",
         }
 
+        # 搜索高亮（由 EditorSearchController 维护，与当前行高亮合并渲染；
+        # 必须在首次 _highlight_current_line 调用之前初始化）
+        self._search_selections: list = []
+
         # 行号区域
         self._line_area = LineNumberArea(self)
         self.blockCountChanged.connect(self._update_line_area_width)
@@ -303,6 +307,11 @@ class MarkdownEditor(QPlainTextEdit):
 
     # ── 当前行高亮 ──
 
+    def set_search_selections(self, selections: list) -> None:
+        """设置搜索匹配高亮（与当前行高亮合并渲染）"""
+        self._search_selections = selections or []
+        self._highlight_current_line()
+
     def _highlight_current_line(self) -> None:
         selections = []
         if not self.isReadOnly():
@@ -312,6 +321,8 @@ class MarkdownEditor(QPlainTextEdit):
             selection.cursor = self.textCursor()
             selection.cursor.clearSelection()
             selections.append(selection)
+        # 搜索高亮排在当前行之后，保证覆盖在当前行底色之上
+        selections.extend(self._search_selections)
         self.setExtraSelections(selections)
 
     # ── 滚动同步 ──

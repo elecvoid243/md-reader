@@ -65,6 +65,9 @@ LIGHT_PALETTE = {
     # 滚动条
     "scrollbar": "#cbc4b2",
     "scrollbar_hov": "#b3ab96",
+    # 搜索（编辑器匹配高亮）
+    "search_match": "#f6e9a0",
+    "search_match_current": "#f2b24c",
 }
 
 def _build_qss(p: dict) -> str:
@@ -401,6 +404,41 @@ QWidget#pane_toggle QToolButton:hover {{
 }}
 QWidget#pane_toggle QToolButton:checked {{
     background-color: {p["accent_soft"]};
+}}
+
+/* ═══ 搜索条（各面板顶部，默认隐藏） ═══ */
+#search_bar {{
+    background-color: {p["inset"]};
+    border-bottom: 1px solid {p["hairline"]};
+}}
+#search_bar QLineEdit {{
+    background-color: {p["surface"]};
+    border: 1px solid {p["border"]};
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 13px;
+}}
+#search_bar QLineEdit:focus {{
+    border: 1px solid {p["accent"]};
+}}
+#search_bar QToolButton {{
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 2px;
+    color: {p["ink_muted"]};
+}}
+#search_bar QToolButton:hover {{
+    background-color: {p["hover"]};
+    color: {p["ink_strong"]};
+}}
+#search_bar QToolButton:checked {{
+    background-color: {p["accent_soft"]};
+    color: {p["accent_strong"]};
+}}
+#search_bar QLabel#search_count {{
+    color: {p["ink_faint"]};
+    font-size: 12px;
 }}
 """
 

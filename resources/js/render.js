@@ -463,3 +463,28 @@ window.addEventListener('resize', function () {
 function getRenderedHtml() {
     return document.getElementById('content').innerHTML;
 }
+
+/* ========== 搜索计数（供 Python 端 findText 配套使用） ========== */
+
+/**
+ * 统计正文中关键词出现次数（只读扫描文本节点，不修改 DOM）。
+ * Python 侧 QWebEnginePage.findText 的回调只回传 bool，
+ * 匹配总数由此函数提供。
+ */
+function countSearchMatches(term, caseSensitive) {
+    if (!term) return 0;
+    var root = document.getElementById('content') || document.body;
+    var needle = caseSensitive ? term : term.toLowerCase();
+    var count = 0;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    var node;
+    while ((node = walker.nextNode())) {
+        var text = caseSensitive ? node.textContent : node.textContent.toLowerCase();
+        var idx = 0;
+        while ((idx = text.indexOf(needle, idx)) >= 0) {
+            count++;
+            idx += needle.length;
+        }
+    }
+    return count;
+}

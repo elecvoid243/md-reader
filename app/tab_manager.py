@@ -17,11 +17,13 @@ from PyQt5.QtWidgets import (
     QSplitter,
     QTabWidget,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
 from .editor import MarkdownEditor
 from .preview import PreviewPane
+from .search_bar import EditorSearchController, SearchBar, WebSearchController
 from .toc_widget import extract_headings
 from .vditor_pane import VditorPane
 
@@ -57,22 +59,45 @@ class EditorPreviewPair(QWidget):
         self._reading_scrollbar.hide()
         self.preview.attach_native_scrollbar(self._reading_scrollbar)
 
-        self._preview_host = QWidget()
-        preview_layout = QHBoxLayout(self._preview_host)
-        preview_layout.setContentsMargins(0, 0, 0, 0)
-        preview_layout.setSpacing(0)
-        preview_layout.addWidget(self.preview, 1)
-        preview_layout.addWidget(self._reading_scrollbar)
+        # 编辑器面板：搜索条（默认隐藏）+ 编辑器
+        self._editor_search_bar = SearchBar()
+        self._editor_search = EditorSearchController(self.editor, self._editor_search_bar)
+        self._editor_host = QWidget()
+        editor_layout = QVBoxLayout(self._editor_host)
+        editor_layout.setContentsMargins(0, 0, 0, 0)
+        editor_layout.setSpacing(0)
+        editor_layout.addWidget(self._editor_search_bar)
+        editor_layout.addWidget(self.editor)
 
-        self._splitter.addWidget(self.editor)
+        # 预览面板：搜索条（默认隐藏）+ (预览 + 原生滚动条)
+        self._preview_search_bar = SearchBar()
+        self._preview_search = WebSearchController(self.preview, self._preview_search_bar)
+        self._preview_host = QWidget()
+        preview_outer = QVBoxLayout(self._preview_host)
+        preview_outer.setContentsMargins(0, 0, 0, 0)
+        preview_outer.setSpacing(0)
+        preview_outer.addWidget(self._preview_search_bar)
+        preview_inner = QHBoxLayout()
+        preview_inner.setContentsMargins(0, 0, 0, 0)
+        preview_inner.setSpacing(0)
+        preview_inner.addWidget(self.preview, 1)
+        preview_inner.addWidget(self._reading_scrollbar)
+        preview_outer.addLayout(preview_inner)
+
+        # 即时渲染面板的搜索条（VditorPane 懒加载，控制器随之创建）
+        self._vditor_search_bar = SearchBar()
+        self._vditor_search: WebSearchController | None = None
+
+        self._splitter.addWidget(self._editor_host)
         self._splitter.addWidget(self._preview_host)
         self._splitter.setSizes([480, 520])
-
-        from PyQt5.QtWidgets import QVBoxLayout
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._splitter)
+
+        # 内容重渲染会清掉 Chromium 的查找高亮，渲染完成后按需重跑
+        self.preview.render_finished.connect(self._preview_search.refresh)
 
         # 防抖定时器：编辑后延迟渲染
         self._debounce = QTimer()
@@ -269,6 +294,8 @@ class EditorPreviewPair(QWidget):
 
     def _apply_mode(self, mode: str, dual_pane: bool) -> None:
         """实际应用模式：控制三个面板的显隐 + 浮动控件"""
+        # 切换模式时面板显隐变化、内容重渲染，关闭所有搜索状态
+        self.close_searches()
         self.view_mode = mode
         self.dual_pane = dual_pane
         self._mode_applied = True
@@ -317,8 +344,30 @@ class EditorPreviewPair(QWidget):
         """懒加载创建 VditorPane（首次进入即时渲染时）"""
         if self._vditor_pane is None:
             self._vditor_pane = VditorPane()
-            self._splitter.addWidget(self._vditor_pane)
+            self._vditor_search = WebSearchController(
+                self._vditor_pane, self._vditor_search_bar
+            )
+            vditor_host = QWidget()
+            host_layout = QVBoxLayout(vditor_host)
+            host_layout.setContentsMargins(0, 0, 0, 0)
+            host_layout.setSpacing(0)
+            host_layout.addWidget(self._vditor_search_bar)
+            host_layout.addWidget(self._vditor_pane)
+            self._splitter.addWidget(vditor_host)
             self._vditor_pane.input_changed.connect(self._on_vditor_input)
+
+            # IR 内容重绘是异步的，输入停顿后重跑搜索恢复高亮
+            self._vditor_search_timer = QTimer()
+            self._vditor_search_timer.setSingleShot(True)
+            self._vditor_search_timer.setInterval(400)
+            self._vditor_search_timer.timeout.connect(
+                lambda: self._vditor_search.refresh() if self._vditor_search else None
+            )
+            self._vditor_pane.input_changed.connect(
+                lambda _t: self._vditor_search_timer.start()
+                if self._vditor_search_bar.is_open()
+                else None
+            )
 
     def _hide_vditor(self) -> None:
         self._vditor_sync_timer.stop()
@@ -386,6 +435,56 @@ class EditorPreviewPair(QWidget):
         if self.view_mode == "edit":
             return self.dual_pane
         return False  # instant 模式不显示独立预览
+
+    # ──────────────────────────────────────────
+    #  面板搜索（阅读 = 预览；即时渲染 = Vditor；源码编辑 = 编辑器/预览双栏）
+    # ──────────────────────────────────────────
+
+    def open_search(self, kind: str) -> None:
+        """打开指定面板的搜索条；目标面板不可见时回退到编辑器"""
+        if kind == "preview" and not self.is_preview_visible():
+            kind = "editor"
+        if kind == "vditor" and self._vditor_pane is None:
+            kind = "editor"
+
+        if kind == "preview":
+            self._preview_search.refresh()
+            self._preview_search_bar.open_bar()
+        elif kind == "vditor":
+            if self._vditor_search is not None:
+                self._vditor_search.refresh()
+            self._vditor_search_bar.open_bar()
+        else:
+            self._editor_search.refresh()
+            self._editor_search_bar.open_bar()
+
+    def step_search(self, forward: bool) -> None:
+        """在当前打开的搜索条中跳到上/下一个匹配"""
+        for bar, ctrl in (
+            (self._editor_search_bar, self._editor_search),
+            (self._preview_search_bar, self._preview_search),
+            (self._vditor_search_bar, self._vditor_search),
+        ):
+            if bar.is_open() and ctrl is not None:
+                ctrl.step(forward)
+
+    def close_searches(self) -> None:
+        """关闭全部搜索条并清除高亮"""
+        for bar in (
+            self._editor_search_bar,
+            self._preview_search_bar,
+            self._vditor_search_bar,
+        ):
+            bar.close_bar()
+
+    def set_search_icons(self, search_icon, prev_icon, next_icon, close_icon) -> None:
+        """设置搜索条图标（随主题刷新）"""
+        for bar in (
+            self._editor_search_bar,
+            self._preview_search_bar,
+            self._vditor_search_bar,
+        ):
+            bar.set_icons(search_icon, prev_icon, next_icon, close_icon)
 
     def set_scroll_sync_enabled(self, enabled: bool) -> None:
         if enabled:

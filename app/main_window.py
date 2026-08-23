@@ -195,6 +195,25 @@ class MainWindow(QMainWindow):
         self._act_exit.triggered.connect(self.close)
         file_menu.addAction(self._act_exit)
 
+        # ── 编辑菜单 ──
+        edit_menu = menubar.addMenu("编辑(&E)")
+
+        self._act_find = QAction("查找(&F)...", self)
+        self._act_find.setShortcut(QKeySequence.Find)
+        self._act_find.setStatusTip("在当前面板中查找关键词")
+        self._act_find.triggered.connect(self._open_find)
+        edit_menu.addAction(self._act_find)
+
+        self._act_find_next = QAction("查找下一个", self)
+        self._act_find_next.setShortcut("F3")
+        self._act_find_next.triggered.connect(lambda: self._step_find(True))
+        edit_menu.addAction(self._act_find_next)
+
+        self._act_find_prev = QAction("查找上一个", self)
+        self._act_find_prev.setShortcut("Shift+F3")
+        self._act_find_prev.triggered.connect(lambda: self._step_find(False))
+        edit_menu.addAction(self._act_find_prev)
+
         # ── 视图菜单 ──
         view_menu = menubar.addMenu("视图(&V)")
 
@@ -604,8 +623,52 @@ class MainWindow(QMainWindow):
         pair.set_view_mode(self._view_mode, self._dual_pane)
         pair.set_dual_pane_callback(self._request_dual_pane)
         pair.set_pane_icons(self._icons["pane_single"], self._icons["pane_dual"])
+        pair.set_search_icons(
+            self._icons["search"],
+            self._icons["chevron_up"],
+            self._icons["chevron_down"],
+            self._icons["close"],
+        )
         if pair.vditor_pane is not None:
             pair.vditor_pane.set_theme(self._theme_mgr.current_theme)
+
+    # ──────────────────────────────────────────
+    #  查找
+    # ──────────────────────────────────────────
+
+    def _open_find(self) -> None:
+        """Ctrl+F：按当前视图模式与焦点位置打开对应面板的搜索条"""
+        pair = self._tabs.current_pair()
+        if pair is None:
+            return
+
+        if pair.view_mode == "reading":
+            kind = "preview"
+        elif pair.view_mode == "instant":
+            kind = "vditor"
+        else:
+            kind = "editor"
+            # 源码编辑双栏：焦点在预览上则搜预览（网页聚焦时 focusWidget
+            # 是 QWebEngineView 内部的 focusProxy，需沿父链回溯判断）
+            if pair.dual_pane and self._focus_in_widget(pair.preview):
+                kind = "preview"
+        pair.open_search(kind)
+
+    def _step_find(self, forward: bool) -> None:
+        """F3 / Shift+F3：在当前打开的搜索条中跳转匹配"""
+        pair = self._tabs.current_pair()
+        if pair is not None:
+            pair.step_search(forward)
+
+    @staticmethod
+    def _focus_in_widget(target: QWidget) -> bool:
+        """当前 Qt 焦点控件是否位于 target 内部"""
+        w = QApplication.focusWidget()
+        while w is not None:
+            if w is target:
+                return True
+            w = w.parentWidget()
+        return False
 
     def _toggle_file_tree(self, visible: bool) -> None:
         self._file_dock.setVisible(visible)

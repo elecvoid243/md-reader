@@ -182,6 +182,48 @@ def _draw_sidebar_right(p: QPainter, color: str) -> None:
     _draw_sidebar(p, color, left=False)
 
 
+def _draw_search(p: QPainter, color: str) -> None:
+    """放大镜：查找"""
+    pen = QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    p.drawEllipse(QPointF(10.5, 10.5), 6.2, 6.2)
+    p.drawLine(QPointF(15.2, 15.2), QPointF(20.5, 20.5))
+
+
+def _draw_chevron_up(p: QPainter, color: str) -> None:
+    """上箭头：上一个匹配"""
+    pen = QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    path = QPainterPath()
+    path.moveTo(6, 14.5)
+    path.lineTo(12, 8.5)
+    path.lineTo(18, 14.5)
+    p.drawPath(path)
+
+
+def _draw_chevron_down(p: QPainter, color: str) -> None:
+    """下箭头：下一个匹配"""
+    pen = QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    path = QPainterPath()
+    path.moveTo(6, 9.5)
+    path.lineTo(12, 15.5)
+    path.lineTo(18, 9.5)
+    p.drawPath(path)
+
+
+def _draw_close(p: QPainter, color: str) -> None:
+    """关闭叉：退出查找"""
+    pen = QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    p.drawLine(QPointF(7, 7), QPointF(17, 17))
+    p.drawLine(QPointF(17, 7), QPointF(7, 17))
+
+
 _DRAW = {
     "reading": _draw_reading,
     "instant": _draw_instant,
@@ -193,6 +235,10 @@ _DRAW = {
     "export": _draw_export,
     "sidebar_left": _draw_sidebar_left,
     "sidebar_right": _draw_sidebar_right,
+    "search": _draw_search,
+    "chevron_up": _draw_chevron_up,
+    "chevron_down": _draw_chevron_down,
+    "close": _draw_close,
 }
 
 NAMES = list(_DRAW)
