@@ -266,16 +266,24 @@ body {
 
 /* ══════════════ 表格 ══════════════ */
 
-.markdown-body table {
-    display: block;
-    width: 100%;
-    overflow: auto;
-    border-collapse: collapse;
-    border-spacing: 0;
+/* 滚动容器（由 render.js 渲染后包裹）：承担边框、圆角与横向滚动。
+   table 本体必须保持 display: table —— 一旦变成 display: block，
+   内层匿名表格会按内容收缩（shrink-to-fit），width: 100% 传不到行列，
+   表格就撑不满页面宽度 */
+.markdown-body .table-wrap {
+    overflow-x: auto;
     margin: 1.6em 0;
-    font-size: 0.94em;
     border: 1px solid var(--table-border);
     border-radius: 8px;
+}
+
+.markdown-body table {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    margin: 0;
+    font-size: 0.94em;
 }
 
 .markdown-body table th {

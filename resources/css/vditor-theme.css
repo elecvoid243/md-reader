@@ -210,6 +210,26 @@
 
 /* ══════════════ 表格 ══════════════ */
 
+/* Vditor 默认 table { display: block; overflow: auto }，匿名内层表格
+   会按内容收缩，行列撑不满纸面宽度。恢复 table 语义让表格占满 100%；
+   单元格改为可换行（与阅读模式一致）。
+   overflow-wrap 用 anywhere 而非 break-word：只有 anywhere 会参与
+   min-content 计算，多列窄表 / 超长 token 才压不破 100% 宽度，
+   不会溢出 .vditor-ir（overflow-x: hidden）后被裁剪（Chromium 80+）。
+   运行时注入的 vditor 样式在文档序上晚于本文件，必须用 !important */
+.vditor-reset table {
+    display: table !important;
+    overflow: visible !important;
+    word-break: normal !important;
+    width: 100% !important;
+}
+
+.vditor-reset table td,
+.vditor-reset table th {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+}
+
 .vditor-reset table th {
     background: var(--table-head) !important;
     border-color: var(--table-border) !important;

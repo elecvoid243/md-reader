@@ -87,7 +87,10 @@ blockquote {
     color: #555;
     background-color: #f7f7f7;
 }
-table { border-collapse: collapse; margin: 8pt 0; width: 100%; }
+table { border-collapse: collapse; margin: 0; width: 100%; }
+/* 表格的边距在网页端由 .table-wrap 承担（markdown.css），
+   QTextDocument 不执行该样式，这里补齐 */
+.table-wrap { margin: 8pt 0; }
 th, td { border: 1px solid #bbb; padding: 4pt 6pt; }
 th { background-color: #efefef; }
 hr { border: none; border-top: 1px solid #bbb; margin: 12pt 0; }

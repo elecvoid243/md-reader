@@ -116,6 +116,17 @@ async function renderMarkdown(mdText) {
         // 3. 设置 HTML 内容
         content.innerHTML = html;
 
+        // 3.1 表格包裹滚动容器（见 markdown.css 的 .table-wrap）。
+        //     超宽表格需要横向滚动，但 table { display: block } 会让
+        //     匿名内层表格按内容收缩、撑不满宽度，因此滚动职责移到外层 div，
+        //     table 保持原生表格语义；innerHTML 每次全量重建，无重复包裹风险
+        content.querySelectorAll('table').forEach(function (table) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'table-wrap';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+        });
+
         // 3.5 预处理：保护 mermaid 代码块（直接基于 DOM 提取，避免依赖
         //     marked 序列化 HTML 的固定格式；同时避免被 KaTeX 误处理）
         const mermaidBlocks = [];
