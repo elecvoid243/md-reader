@@ -303,17 +303,30 @@ function wrapTablesIn(root) {
     });
 }
 
-async function renderMermaidIn(root) {
-    const mermaidBlocks = [];
+/**
+ * mermaid 处理分两阶段（见 renderBlockFragment / renderPendingMermaid）：
+ * 1) 构建片段时：pre 替换为注释占位（防止 KaTeX 误处理源码里的 $），
+ *    KaTeX 完成后还原为 div（缓存命中直接回填 SVG）
+ * 2) 片段插入文档后：才调用 mermaid.run 渲染未命中的图——
+ *    mermaid 的 d3 布局依赖真实排版（getBBox），
+ *    在 detached 容器里渲染会得到零尺寸/布局损坏的 SVG
+ */
+function protectMermaidIn(root) {
+    const sources = [];
     root.querySelectorAll('pre code.language-mermaid').forEach(function (code) {
         const pre = code.parentElement;
         const holder = document.createComment(
-            'MERMAID_PLACEHOLDER_' + mermaidBlocks.length
+            'MERMAID_PLACEHOLDER_' + sources.length
         );
-        mermaidBlocks.push(code.textContent);
+        sources.push(code.textContent);
         pre.parentNode.replaceChild(holder, pre);
     });
-    if (mermaidBlocks.length === 0) return;
+    return sources;
+}
+
+function restoreMermaidIn(root, sources) {
+    const pending = [];
+    if (sources.length === 0) return pending;
 
     const placeholderNodes = {};
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
@@ -323,11 +336,10 @@ async function renderMermaidIn(root) {
         if (pm) placeholderNodes[parseInt(pm[1], 10)] = commentNode;
     }
 
-    const pendingMermaid = [];
-    for (let i = 0; i < mermaidBlocks.length; i++) {
+    for (let i = 0; i < sources.length; i++) {
         const holder = placeholderNodes[i];
         if (!holder) continue;
-        const source = mermaidBlocks[i];
+        const source = sources[i];
         const div = document.createElement('div');
         const cachedSvg = mermaidSvgCache.get(source);
         if (cachedSvg !== undefined) {
@@ -337,31 +349,33 @@ async function renderMermaidIn(root) {
         } else {
             div.className = 'mermaid';
             div.textContent = source;
-            pendingMermaid.push({ node: div, source: source });
+            pending.push({ node: div, source: source });
         }
         holder.parentNode.replaceChild(div, holder);
     }
+    return pending;
+}
 
-    if (pendingMermaid.length > 0) {
-        try {
-            await mermaid.run({
-                nodes: pendingMermaid.map(function (p) { return p.node; }),
-            });
-            pendingMermaid.forEach(function (p) {
-                if (p.node.querySelector('svg')) {
-                    cacheSet(mermaidSvgCache, MERMAID_CACHE_MAX, p.source, p.node.innerHTML);
-                }
-            });
-        } catch (e) {
-            console.warn('[render.js] Mermaid render error:', e);
-            pendingMermaid.forEach(function (p) {
-                if (!p.node.querySelector('svg')) {
-                    p.node.innerHTML =
-                        '<div class="mermaid-error">⚠ Mermaid 渲染失败: ' +
-                        escapeHtml(e.message || String(e)) + '</div>';
-                }
-            });
-        }
+async function renderPendingMermaid(pending) {
+    if (!pending || pending.length === 0) return;
+    try {
+        await mermaid.run({
+            nodes: pending.map(function (p) { return p.node; }),
+        });
+        pending.forEach(function (p) {
+            if (p.node.querySelector('svg')) {
+                cacheSet(mermaidSvgCache, MERMAID_CACHE_MAX, p.source, p.node.innerHTML);
+            }
+        });
+    } catch (e) {
+        console.warn('[render.js] Mermaid render error:', e);
+        pending.forEach(function (p) {
+            if (!p.node.querySelector('svg')) {
+                p.node.innerHTML =
+                    '<div class="mermaid-error">⚠ Mermaid 渲染失败: ' +
+                    escapeHtml(e.message || String(e)) + '</div>';
+            }
+        });
     }
 }
 
@@ -385,6 +399,8 @@ function highlightCodeIn(root) {
 /**
  * 渲染单个块为 DocumentFragment（不插入文档）。
  * defsPrefix 为全部链接定义块的拼接文本，保证引用式链接可用。
+ * 返回 { frag, pendingMermaid }：未命中缓存的 mermaid 图必须等
+ * frag 插入文档后再交给 renderPendingMermaid 渲染（d3 需要真实布局）。
  */
 async function renderBlockFragment(blockText, defsPrefix) {
     const holder = document.createElement('div');
@@ -397,14 +413,15 @@ async function renderBlockFragment(blockText, defsPrefix) {
     holder.innerHTML = html;
 
     wrapTablesIn(holder);
-    await renderMermaidIn(holder);
+    const mermaidSources = protectMermaidIn(holder);
     renderMathCached(holder);
+    const pendingMermaid = restoreMermaidIn(holder, mermaidSources);
     highlightCodeIn(holder);
     addCodeBlockHeaders(holder);
 
     const frag = document.createDocumentFragment();
     while (holder.firstChild) frag.appendChild(holder.firstChild);
-    return frag;
+    return { frag: frag, pendingMermaid: pendingMermaid };
 }
 
 /* ── 全量重建（首次渲染 / 增量失败回退 / 全局状态变化） ── */
@@ -417,11 +434,15 @@ async function renderAllBlocks(mdText, content) {
     const defs = collectLinkDefs(blocks);
     content.innerHTML = '';
     const entries = [];
+    const allPending = [];
     for (let k = 0; k < blocks.length; k++) {
-        const frag = await renderBlockFragment(blocks[k], defs);
-        entries.push({ h: blockHash(blocks[k]), n: frag.childNodes.length });
-        content.appendChild(frag);
+        const r = await renderBlockFragment(blocks[k], defs);
+        entries.push({ h: blockHash(blocks[k]), n: r.frag.childNodes.length });
+        content.appendChild(r.frag);
+        allPending.push.apply(allPending, r.pendingMermaid);
     }
+    // 全部片段已插入文档，统一渲染未命中的 mermaid（批次越大越省）
+    await renderPendingMermaid(allPending);
     blockState.entries = entries;
     blockState.ready = true;
     forceFullRender = false;
@@ -487,16 +508,20 @@ async function renderIncremental(mdText, content) {
         for (let k = domPos; k < domPos + oldCount; k++) oldNodes.push(children[k]);
 
         const frag = document.createDocumentFragment();
+        const runPending = [];
         let newCount = 0;
         for (let k = j; k < b; k++) {
-            const bf = await renderBlockFragment(blocks[k], defs);
-            result.push({ h: newHashes[k], n: bf.childNodes.length });
-            newCount += bf.childNodes.length;
-            frag.appendChild(bf);
+            const r = await renderBlockFragment(blocks[k], defs);
+            result.push({ h: newHashes[k], n: r.frag.childNodes.length });
+            newCount += r.frag.childNodes.length;
+            runPending.push.apply(runPending, r.pendingMermaid);
+            frag.appendChild(r.frag);
         }
         const anchor = content.childNodes[domPos] || null;
         content.insertBefore(frag, anchor);
         for (const node of oldNodes) content.removeChild(node);
+        // 片段已在文档内，渲染未命中的 mermaid
+        await renderPendingMermaid(runPending);
 
         domPos += newCount;
         i = a; j = b;
