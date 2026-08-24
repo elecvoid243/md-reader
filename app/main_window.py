@@ -630,8 +630,12 @@ class MainWindow(QMainWindow):
     def _apply_view_mode_to_pair(self, pair: EditorPreviewPair) -> None:
         """将当前视图模式应用到单个新建标签页"""
         pair.set_view_mode(self._view_mode, self._dual_pane)
+        # 滚动同步全局开关对新标签页生效（含启动时的首个标签页）
+        pair.set_scroll_sync_enabled(self._config.get("scroll_sync", True))
+        pair.set_scroll_sync_callback(self._set_scroll_sync)
         pair.set_dual_pane_callback(self._request_dual_pane)
         pair.set_pane_icons(self._icons["pane_single"], self._icons["pane_dual"])
+        pair.set_sync_icon(self._icons["sync"])
         self._apply_fonts_to_pair(pair)
         # 即时渲染面板懒加载创建，字体/主题等全局设置在创建时补发
         pair.vditor_created.connect(
@@ -782,6 +786,17 @@ class MainWindow(QMainWindow):
                     pair.vditor_pane.set_theme(theme_name)
 
     def _toggle_scroll_sync(self, enabled: bool) -> None:
+        self._set_scroll_sync(enabled)
+
+    def _set_scroll_sync(self, enabled: bool) -> None:
+        """滚动同步统一入口：菜单开关与编辑器旁按钮共享。
+
+        阻断菜单 action 的信号回写，避免 按钮→回调→此处→菜单→信号 的回环。
+        """
+        act = self._act_scroll_sync
+        was = act.blockSignals(True)
+        act.setChecked(enabled)
+        act.blockSignals(was)
         self._config.set("scroll_sync", enabled)
         for i in range(self._tabs.count()):
             pair = self._tabs.widget(i)

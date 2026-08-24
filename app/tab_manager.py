@@ -62,7 +62,7 @@ class EditorPreviewPair(QWidget):
         self._reading_scrollbar.hide()
         self.preview.attach_native_scrollbar(self._reading_scrollbar)
 
-        # 编辑器面板：搜索条（默认隐藏）+ 编辑器
+        # 编辑器面板：搜索条（默认隐藏）+ (编辑器 + 同步开关列)
         self._editor_search_bar = SearchBar()
         self._editor_search = EditorSearchController(self.editor, self._editor_search_bar)
         self._editor_host = QWidget()
@@ -70,7 +70,13 @@ class EditorPreviewPair(QWidget):
         editor_layout.setContentsMargins(0, 0, 0, 0)
         editor_layout.setSpacing(0)
         editor_layout.addWidget(self._editor_search_bar)
-        editor_layout.addWidget(self.editor)
+        editor_row = QHBoxLayout()
+        editor_row.setContentsMargins(0, 0, 0, 0)
+        editor_row.setSpacing(0)
+        editor_row.addWidget(self.editor, 1)
+        self._build_sync_toggle()
+        editor_row.addWidget(self._sync_column)
+        editor_layout.addLayout(editor_row)
 
         # 预览面板：搜索条（默认隐藏）+ (预览 + 原生滚动条)
         self._preview_search_bar = SearchBar()
@@ -135,6 +141,40 @@ class EditorPreviewPair(QWidget):
         # 右上角浮动 单/双栏 切换控件（仅源码编辑模式显示）
         self._dual_pane_cb = None
         self._build_pane_toggle()
+
+        # 滚动同步按钮 → 主窗口全局状态的回调（注入，见 set_scroll_sync_callback）
+        self._scroll_sync_cb = None
+
+    def _build_sync_toggle(self) -> None:
+        """编辑器滚动条旁的滚动同步开关列（仅双栏编辑模式显示）"""
+        self._sync_column = QWidget()
+        self._sync_column.setFixedWidth(20)
+        col = QVBoxLayout(self._sync_column)
+        col.setContentsMargins(1, 6, 1, 0)
+        col.setSpacing(0)
+
+        self._btn_scroll_sync = QToolButton()
+        self._btn_scroll_sync.setObjectName("scroll_sync_toggle")
+        self._btn_scroll_sync.setCheckable(True)
+        self._btn_scroll_sync.setAutoRaise(True)
+        self._btn_scroll_sync.setIconSize(QSize(14, 14))
+        self._btn_scroll_sync.setToolTip("滚动同步（点击开/关）")
+        self._btn_scroll_sync.toggled.connect(self._on_sync_button_toggled)
+        col.addWidget(self._btn_scroll_sync)
+        col.addStretch(1)
+        self._sync_column.hide()
+
+    def set_scroll_sync_callback(self, cb) -> None:
+        """注入同步开关回调（驱动主窗口的全局滚动同步状态）"""
+        self._scroll_sync_cb = cb
+
+    def set_sync_icon(self, icon) -> None:
+        """设置同步按钮图标（随主题刷新）"""
+        self._btn_scroll_sync.setIcon(icon)
+
+    def _on_sync_button_toggled(self, checked: bool) -> None:
+        if self._scroll_sync_cb is not None:
+            self._scroll_sync_cb(checked)
 
     def _build_pane_toggle(self) -> None:
         """构建右上角浮动的单/双栏分段控件"""
@@ -350,6 +390,7 @@ class EditorPreviewPair(QWidget):
             # 会让空 host 留在分割器里，出现半屏空白和可拖动的分割条
             self._hide_vditor()
             self._editor_host.hide()
+            self._sync_column.hide()
             self._preview_host.show()
             self._reading_scrollbar.hide()
             self.preview.set_native_scroll_proxy_enabled(True)
@@ -362,12 +403,14 @@ class EditorPreviewPair(QWidget):
                 self._preview_host.show()
                 self._reading_scrollbar.hide()
                 self.preview.set_native_scroll_proxy_enabled(False)
+                self._sync_column.show()
                 self._restore_split()
                 self.render_now()
             else:
                 self._preview_host.hide()
                 self._reading_scrollbar.hide()
                 self.preview.set_native_scroll_proxy_enabled(False)
+                self._sync_column.hide()
             # 同步浮动按钮选中态并定位
             self._btn_dual.setChecked(dual_pane)
             self._btn_single.setChecked(not dual_pane)
@@ -375,6 +418,7 @@ class EditorPreviewPair(QWidget):
         elif mode == "instant":
             # 即时渲染：仅 Vditor，把编辑器内容推入
             self._editor_host.hide()
+            self._sync_column.hide()
             self._preview_host.hide()
             self._reading_scrollbar.hide()
             self.preview.set_native_scroll_proxy_enabled(False)
@@ -533,15 +577,21 @@ class EditorPreviewPair(QWidget):
             bar.set_icons(search_icon, prev_icon, next_icon, close_icon)
 
     def set_scroll_sync_enabled(self, enabled: bool) -> None:
+        """开启/关闭双栏滚动同步（幂等：先断开再按需连接）。
+
+        同时刷新编辑器旁的同步按钮选中态（阻断信号避免回环）。
+        """
+        try:
+            self.editor.scroll_percent_changed.disconnect(self._sync_preview_scroll)
+            self.preview.scroll_updated.disconnect(self._sync_editor_scroll)
+        except TypeError:
+            pass
         if enabled:
             self.editor.scroll_percent_changed.connect(self._sync_preview_scroll)
             self.preview.scroll_updated.connect(self._sync_editor_scroll)
-        else:
-            try:
-                self.editor.scroll_percent_changed.disconnect(self._sync_preview_scroll)
-                self.preview.scroll_updated.disconnect(self._sync_editor_scroll)
-            except TypeError:
-                pass
+        self._btn_scroll_sync.blockSignals(True)
+        self._btn_scroll_sync.setChecked(enabled)
+        self._btn_scroll_sync.blockSignals(False)
 
 
 class TabManager(QTabWidget):

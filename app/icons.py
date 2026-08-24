@@ -224,6 +224,27 @@ def _draw_close(p: QPainter, color: str) -> None:
     p.drawLine(QPointF(17, 7), QPointF(7, 17))
 
 
+def _draw_sync(p: QPainter, color: str) -> None:
+    """上下双向箭头：滚动同步"""
+    pen = QPen(QColor(color), _STROKE, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    # 上箭头（左列）
+    p.drawLine(QPointF(8, 18.5), QPointF(8, 6.5))
+    head_up = QPainterPath()
+    head_up.moveTo(4.6, 10)
+    head_up.lineTo(8, 6.2)
+    head_up.lineTo(11.4, 10)
+    p.drawPath(head_up)
+    # 下箭头（右列）
+    p.drawLine(QPointF(16, 5.5), QPointF(16, 17.5))
+    head_dn = QPainterPath()
+    head_dn.moveTo(12.6, 14)
+    head_dn.lineTo(16, 17.8)
+    head_dn.lineTo(19.4, 14)
+    p.drawPath(head_dn)
+
+
 _DRAW = {
     "reading": _draw_reading,
     "instant": _draw_instant,
@@ -239,6 +260,7 @@ _DRAW = {
     "chevron_up": _draw_chevron_up,
     "chevron_down": _draw_chevron_down,
     "close": _draw_close,
+    "sync": _draw_sync,
 }
 
 NAMES = list(_DRAW)

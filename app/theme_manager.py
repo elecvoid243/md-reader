@@ -436,6 +436,18 @@ QWidget#pane_toggle QToolButton:checked {{
     background-color: {p["accent_soft"]};
     color: {p["accent_strong"]};
 }}
+QToolButton#scroll_sync_toggle {{
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 1px;
+}}
+QToolButton#scroll_sync_toggle:hover {{
+    background-color: {p["hover"]};
+}}
+QToolButton#scroll_sync_toggle:checked {{
+    background-color: {p["accent_soft"]};
+}}
 #search_bar QLabel#search_count {{
     color: {p["ink_faint"]};
     font-size: 12px;
